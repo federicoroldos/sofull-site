@@ -1,6 +1,7 @@
 ﻿# Ramyeon Dictionary
 
 A personal dictionary for Korean ramyeon noodles with Google sign-in and Google Drive persistence.
+Try it out [here](https://federicoroldos.github.io/ramyeon-dictionary/).
 
 ## Features
 
