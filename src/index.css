@@ -8,6 +8,8 @@
   --muted: #6a6f73;
   --accent: #d1553d;
   --accent-dark: #b4432d;
+  --star: #f2b735;
+  --star-muted: #b8b8b8;
   --outline: #22333a;
   --card: #fffdf8;
   --success: #2f5d45;
@@ -298,7 +300,6 @@ textarea {
 .rating {
   display: flex;
   gap: 6px;
-  color: var(--accent);
 }
 
 .rating__star {
@@ -306,10 +307,15 @@ textarea {
   background: none;
   padding: 0;
   cursor: pointer;
+  color: var(--star-muted);
 }
 
 .rating--interactive .rating__star {
   cursor: pointer;
+}
+
+.rating__star[aria-checked='true'] {
+  color: var(--star);
 }
 
 .rating__icon {
@@ -336,6 +342,10 @@ textarea {
   background: #f5e7e2;
 }
 
+.spice__label--not-spicy {
+  background: #f6eee9;
+}
+
 .spice__label--medium {
   background: #f5d7c8;
 }
@@ -354,28 +364,24 @@ textarea {
 }
 
 .spice__pepper {
-  width: 14px;
-  height: 18px;
-  border-radius: 50% 50% 60% 60%;
-  background: #f1d7d0;
-  border: 1.5px solid var(--accent-dark);
-  position: relative;
-  transform: rotate(-20deg);
+  width: 18px;
+  height: 24px;
+  background-image: url('/pepper.svg');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  filter: grayscale(1) saturate(0.2);
+  opacity: 0.35;
+  transform: rotate(-12deg);
 }
 
 .spice__pepper::after {
-  content: '';
-  position: absolute;
-  top: -4px;
-  left: 4px;
-  width: 6px;
-  height: 4px;
-  border-radius: 0 0 4px 4px;
-  background: var(--success);
+  content: none;
 }
 
 .spice__pepper--on {
-  background: var(--accent);
+  filter: none;
+  opacity: 1;
 }
 
 .empty-state {

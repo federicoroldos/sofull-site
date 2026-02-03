@@ -143,6 +143,7 @@ const EntryFormModal = ({ isOpen, initial, onClose, onSave }: Props) => {
               value={values.spiciness}
               onChange={(event) => handleChange('spiciness', event.target.value as SpicinessLevel)}
             >
+              <option value="not-spicy">Not spicy</option>
               <option value="mild">Mild</option>
               <option value="medium">Medium</option>
               <option value="hot">Hot</option>

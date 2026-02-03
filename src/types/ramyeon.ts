@@ -1,5 +1,5 @@
 ﻿export type FormFactor = 'packet' | 'cup';
-export type SpicinessLevel = 'mild' | 'medium' | 'hot' | 'extreme';
+export type SpicinessLevel = 'not-spicy' | 'mild' | 'medium' | 'hot' | 'extreme';
 
 export interface RamyeonEntry {
   id: string;

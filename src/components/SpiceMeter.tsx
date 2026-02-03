@@ -5,6 +5,7 @@ interface Props {
 }
 
 const spiceMap: Record<SpicinessLevel, { label: string; value: number }> = {
+  'not-spicy': { label: 'Not spicy', value: 0 },
   mild: { label: 'Mild', value: 1 },
   medium: { label: 'Medium', value: 2 },
   hot: { label: 'Hot', value: 3 },
