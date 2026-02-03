@@ -80,5 +80,3 @@ export const downloadFromAppData = async (token: string, fileId: string) => {
 
   return response.text();
 };
-
-export const getBackupFilename = () => BACKUP_FILENAME;

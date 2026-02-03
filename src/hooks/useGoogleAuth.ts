@@ -42,7 +42,6 @@ const persistToken = (token: string | null) => {
       JSON.stringify({ token, storedAt: Date.now() })
     );
   } catch {
-    // Ignore storage errors (e.g. private mode)
   }
 };
 
