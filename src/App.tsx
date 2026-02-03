@@ -289,6 +289,8 @@ const App = () => {
         onClose={closeModal}
         onSave={handleSaveEntry}
       />
+
+      <footer className="app__footer">© 2026 Federico Roldos. All rights reserved.</footer>
     </div>
   );
 };

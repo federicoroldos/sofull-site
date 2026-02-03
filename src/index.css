@@ -33,12 +33,17 @@ body {
 
 #root {
   min-height: 100vh;
+  display: flex;
 }
 
 .app {
   max-width: 1060px;
   margin: 0 auto;
-  padding: 48px 24px 80px;
+  padding: 48px 24px 32px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
 }
 
 .app__header {
@@ -417,6 +422,14 @@ textarea {
   max-height: 85vh;
   overflow: auto;
   box-shadow: 0 22px 48px rgba(0, 0, 0, 0.2);
+}
+
+.app__footer {
+  margin-top: auto;
+  padding-top: 12px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .modal__header {
