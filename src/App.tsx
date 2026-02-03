@@ -3,6 +3,7 @@ import EntryCard from './components/EntryCard';
 import EntryFormModal from './components/EntryFormModal';
 import { useGoogleAuth } from './hooks/useGoogleAuth';
 import { downloadFromAppData, ensureAppDataFile, uploadToAppData } from './utils/googleDriveClient';
+import { sanitizeEntries } from './utils/sanitize';
 import type { RamyeonDataFile, RamyeonEntry } from './types/ramyeon';
 
 const DEFAULT_DATA: RamyeonDataFile = {
@@ -40,7 +41,7 @@ const parseDataFile = (payload: string): RamyeonDataFile => {
     return {
       version: parsed.version ?? 1,
       updatedAt: parsed.updatedAt ?? nowIso(),
-      entries: parsed.entries
+      entries: sanitizeEntries(parsed.entries)
     };
   } catch {
     return { ...DEFAULT_DATA, updatedAt: nowIso() };
@@ -119,10 +120,11 @@ const App = () => {
     setSyncState('saving');
     setSyncMessage('Saving to Google Drive...');
     try {
+      const sanitizedEntries = sanitizeEntries(nextEntries);
       const payload: RamyeonDataFile = {
         version: 1,
         updatedAt: nowIso(),
-        entries: nextEntries
+        entries: sanitizedEntries
       };
       await uploadToAppData(accessToken, driveFileId, JSON.stringify(payload, null, 2));
       setSyncState('idle');
@@ -141,7 +143,9 @@ const App = () => {
         ...values,
         updatedAt: nowIso()
       };
-      const nextEntries = entries.map((entry) => (entry.id === editingEntry.id ? updatedEntry : entry));
+      const nextEntries = sanitizeEntries(
+        entries.map((entry) => (entry.id === editingEntry.id ? updatedEntry : entry))
+      );
       setEntries(nextEntries);
       void saveToDrive(nextEntries);
     } else {
@@ -151,7 +155,7 @@ const App = () => {
         updatedAt: nowIso(),
         ...values
       };
-      const nextEntries = [newEntry, ...entries];
+      const nextEntries = sanitizeEntries([newEntry, ...entries]);
       setEntries(nextEntries);
       void saveToDrive(nextEntries);
     }

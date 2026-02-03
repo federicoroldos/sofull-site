@@ -61,3 +61,4 @@ The file is created automatically on first login and updated on every create, ed
 
 - If you refresh and Drive actions stop working, sign out and sign back in to refresh the access token.
 - The app includes a demo entry when signed out to show the layout.
+- For security, image URLs must use `https://` (non-HTTPS URLs are rejected).

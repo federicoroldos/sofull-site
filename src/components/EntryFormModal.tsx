@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import RatingStars from './RatingStars';
+import { sanitizeUrl } from '../utils/sanitize';
 import type { FormFactor, RamyeonEntry, SpicinessLevel } from '../types/ramyeon';
 
 interface Props {
@@ -59,6 +60,11 @@ const EntryFormModal = ({ isOpen, initial, onClose, onSave }: Props) => {
       setError('Name and brand are required.');
       return;
     }
+    const cleanedImageUrl = sanitizeUrl(values.imageUrl);
+    if (values.imageUrl.trim() && !cleanedImageUrl) {
+      setError('Image URL must start with https://');
+      return;
+    }
     onSave({
       ...values,
       rating: clampRating(values.rating || 1),
@@ -66,7 +72,7 @@ const EntryFormModal = ({ isOpen, initial, onClose, onSave }: Props) => {
       nameEnglish: values.nameEnglish.trim(),
       brand: values.brand.trim(),
       description: values.description.trim(),
-      imageUrl: values.imageUrl.trim()
+      imageUrl: cleanedImageUrl
     });
   };
 

@@ -1,5 +1,6 @@
 ﻿import RatingStars from './RatingStars';
 import SpiceMeter from './SpiceMeter';
+import { sanitizeUrl } from '../utils/sanitize';
 import type { RamyeonEntry } from '../types/ramyeon';
 
 interface Props {
@@ -12,12 +13,13 @@ interface Props {
 const EntryCard = ({ entry, onEdit, onDelete, canEdit }: Props) => {
   const hasEnglish = entry.nameEnglish && entry.nameEnglish.trim().length > 0;
   const displayName = hasEnglish ? `${entry.name} (${entry.nameEnglish})` : entry.name;
+  const imageUrl = sanitizeUrl(entry.imageUrl);
 
   return (
     <article className="entry-card">
       <div className="entry-card__image">
-        {entry.imageUrl ? (
-          <img src={entry.imageUrl} alt={entry.name} />
+        {imageUrl ? (
+          <img src={imageUrl} alt={entry.name} />
         ) : (
           <span>pic</span>
         )}
