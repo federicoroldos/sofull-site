@@ -2,6 +2,16 @@
 
 A personal dictionary for Korean ramyeon noodles with Google sign-in and Google Drive persistence.
 
+## Features
+
+- Dictionary-style list of ramyeon entries with name, brand, form factor, rating, and spiciness.
+- Google sign-in to uniquely identify each user.
+- Google Drive `appDataFolder` sync (JSON file auto-created and updated on every change).
+- CRUD operations: add, edit, delete entries with confirmation.
+- 5-star rating with half-star support.
+- Sorting: alphabetical (Korean or English) and best rated.
+- Optional search by name or brand.
+
 ## Local Setup
 
 1. Install dependencies:
