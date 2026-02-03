@@ -430,6 +430,19 @@ textarea {
   text-align: center;
   font-size: 12px;
   color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app__footer a {
+  color: var(--outline);
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.app__footer a:hover {
+  color: var(--accent-dark);
 }
 
 .modal__header {

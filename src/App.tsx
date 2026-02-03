@@ -325,7 +325,10 @@ const App = () => {
         </div>
       )}
 
-      <footer className="app__footer">© 2026 Federico Roldos. All rights reserved.</footer>
+      <footer className="app__footer">
+        <span>© 2026 Federico Roldos. All rights reserved.</span>
+        <a href="/privacy.html">Privacy Policy</a>
+      </footer>
     </div>
   );
 };
