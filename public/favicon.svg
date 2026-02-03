@@ -3,7 +3,7 @@
   <!-- Background -->
   <rect x="0" y="0" width="100" height="100" rx="22" ry="22" fill="#efece3" />
   <!-- Noodles icon -->
-  <g transform="translate(17,18) scale(1.4)">
+  <g transform="translate(17,21.4) scale(1.4)">
     <defs>
       <style>
         .cls-1 { fill: #ff6368; }

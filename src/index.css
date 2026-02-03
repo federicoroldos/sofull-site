@@ -435,6 +435,13 @@ textarea {
   gap: 6px;
 }
 
+.app__footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
 .app__footer a {
   color: var(--outline);
   font-weight: 700;
