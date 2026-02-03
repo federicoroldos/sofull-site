@@ -15,7 +15,7 @@ const demoEntries: RamyeonEntry[] = [
   {
     id: 'demo-1',
     name: '진라면',
-    nameEnglish: 'Jin Ramen',
+    nameEnglish: 'Shin Ramyeon',
     brand: 'Ottogi',
     formFactor: 'packet',
     rating: 4,
@@ -50,7 +50,16 @@ const parseDataFile = (payload: string): RamyeonDataFile => {
 const createId = () => (crypto?.randomUUID ? crypto.randomUUID() : `ramyeon-${Date.now()}`);
 
 const App = () => {
-  const { user, accessToken, loading: authLoading, error: authError, signIn, signOut } = useGoogleAuth();
+  const {
+    user,
+    accessToken,
+    tokenExpired,
+    clearTokenExpired,
+    loading: authLoading,
+    error: authError,
+    signIn,
+    signOut
+  } = useGoogleAuth();
   const [entries, setEntries] = useState<RamyeonEntry[]>([]);
   const [sortMode, setSortMode] = useState<'alpha-en' | 'alpha-ko' | 'rating'>('alpha-ko');
   const [query, setQuery] = useState('');
@@ -178,7 +187,7 @@ const App = () => {
         const data = parseDataFile(content);
         setEntries(data.entries || []);
         setSyncState('idle');
-        setSyncMessage(`Loaded ${data.entries.length} entries`);
+        setSyncMessage(`Loaded ${data.entries.length} entries.`);
         if (!content || content.trim().length === 0) {
           await uploadToAppData(accessToken, fileId, JSON.stringify(DEFAULT_DATA, null, 2));
         }
@@ -199,10 +208,10 @@ const App = () => {
     <div className="app">
       <header className="app__header">
         <div>
-          <p className="app__eyebrow">personal dictionary</p>
+          <p className="app__eyebrow">라면 사전</p>
           <h1>Ramyeon Dictionary</h1>
           <p className="app__subtitle">
-            Catalog your favorite Korean ramyeon, rate each bite, and keep the notes synced in Drive.
+            Track and rate the ramyeon you’ve tried
           </p>
         </div>
         <div className="auth">
@@ -245,7 +254,7 @@ const App = () => {
           <label className="sort">
             <span>Sort</span>
             <select value={sortMode} onChange={(event) => setSortMode(event.target.value as typeof sortMode)}>
-              <option value="alpha-ko">Alphabetical (Korean)</option>
+              <option value="alpha-ko">Alphabetical (Hangul)</option>
               <option value="alpha-en">Alphabetical (English)</option>
               <option value="rating">Best rated</option>
             </select>
@@ -291,6 +300,26 @@ const App = () => {
         onClose={closeModal}
         onSave={handleSaveEntry}
       />
+
+      {tokenExpired && (
+        <div className="modal" role="dialog" aria-modal="true" aria-labelledby="session-expired-title">
+          <div className="modal__backdrop" />
+          <div className="modal__content">
+            <div className="modal__header">
+              <h2 id="session-expired-title">Session expired</h2>
+            </div>
+            <p>Your Google access token expired. Refresh the page and sign in again to continue syncing.</p>
+            <div className="modal__footer">
+              <button className="button button--ghost" onClick={clearTokenExpired}>
+                Dismiss
+              </button>
+              <button className="button" onClick={() => window.location.reload()}>
+                Refresh & sign in
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <footer className="app__footer">© 2026 Federico Roldos. All rights reserved.</footer>
     </div>
