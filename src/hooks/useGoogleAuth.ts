@@ -18,6 +18,7 @@ export const useGoogleAuth = () => {
   const [user, setUser] = useState<User | null>(auth.currentUser);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (nextUser) => {
@@ -31,6 +32,7 @@ export const useGoogleAuth = () => {
 
   const signIn = async () => {
     setLoading(true);
+    setError(null);
     try {
       const result = await signInWithPopup(auth, provider);
       const credential = GoogleAuthProvider.credentialFromResult(result);
@@ -39,6 +41,9 @@ export const useGoogleAuth = () => {
       } else {
         setAccessToken(null);
       }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Google sign-in failed.';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -49,10 +54,11 @@ export const useGoogleAuth = () => {
     try {
       await signOut(auth);
       setAccessToken(null);
+      setError(null);
     } finally {
       setLoading(false);
     }
   };
 
-  return { user, accessToken, loading, signIn, signOut: signOutUser };
+  return { user, accessToken, loading, error, signIn, signOut: signOutUser };
 };

@@ -50,7 +50,7 @@ const parseDataFile = (payload: string): RamyeonDataFile => {
 const createId = () => (crypto?.randomUUID ? crypto.randomUUID() : `ramyeon-${Date.now()}`);
 
 const App = () => {
-  const { user, accessToken, loading: authLoading, signIn, signOut } = useGoogleAuth();
+  const { user, accessToken, loading: authLoading, error: authError, signIn, signOut } = useGoogleAuth();
   const [entries, setEntries] = useState<RamyeonEntry[]>([]);
   const [sortMode, setSortMode] = useState<'alpha-en' | 'alpha-ko' | 'rating'>('alpha-ko');
   const [query, setQuery] = useState('');
@@ -255,7 +255,9 @@ const App = () => {
 
       <section className="status">
         {!isLoggedIn && (
-          <p className="status__message">Sign in to add, edit, and sync your ramyeon list.</p>
+          <p className={`status__message ${authError ? 'status__message--error' : ''}`}>
+            {authError || 'Sign in to add, edit, and sync your ramyeon list.'}
+          </p>
         )}
         {isLoggedIn && (
           <p className={`status__message status__message--${syncState}`}>
