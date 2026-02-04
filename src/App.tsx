@@ -22,7 +22,7 @@ const DEFAULT_DATA: RamyeonDataFile = {
 const demoEntries: RamyeonEntry[] = [
   {
     id: 'demo-1',
-    name: '진라면',
+    name: '신라면',
     nameEnglish: 'Shin Ramyeon',
     brand: 'Ottogi',
     formFactor: 'packet',
