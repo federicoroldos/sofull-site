@@ -80,3 +80,124 @@ export const downloadFromAppData = async (token: string, fileId: string) => {
 
   return response.text();
 };
+
+const escapeQueryValue = (value: string) => value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+interface DriveFileMetadata {
+  id: string;
+  name: string;
+  mimeType: string;
+  thumbnailLink?: string;
+  webViewLink?: string;
+}
+
+export const ensureFolder = async (token: string, name: string, parentId?: string) => {
+  const normalizedName = name.trim();
+  if (!normalizedName) throw new Error('Folder name is required.');
+
+  const parentFilter = parentId ? ` and '${escapeQueryValue(parentId)}' in parents` : '';
+  const query = `name = '${escapeQueryValue(normalizedName)}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false${parentFilter}`;
+  const listUrl = `${FILES_URL}?q=${encodeURIComponent(query)}&spaces=drive&fields=files(id,name)&orderBy=createdTime asc&pageSize=1`;
+  const listResponse = await fetch(listUrl, {
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  if (!listResponse.ok) {
+    const errorText = await listResponse.text();
+    throw new Error(`Error listing folders: ${errorText || listResponse.statusText}`);
+  }
+
+  const listData = (await listResponse.json()) as { files?: Array<{ id: string }> };
+  if (listData.files?.[0]?.id) {
+    return listData.files[0].id;
+  }
+
+  const createResponse = await fetch(FILES_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      name: normalizedName,
+      mimeType: 'application/vnd.google-apps.folder',
+      ...(parentId ? { parents: [parentId] } : {})
+    })
+  });
+
+  if (!createResponse.ok) {
+    const errorText = await createResponse.text();
+    throw new Error(`Error creating folder: ${errorText || createResponse.statusText}`);
+  }
+
+  const createdFolder = (await createResponse.json()) as { id?: string };
+  if (!createdFolder.id) {
+    throw new Error('Could not resolve folder id.');
+  }
+  return createdFolder.id;
+};
+
+export const uploadFileMultipart = async (token: string, file: File, folderId: string): Promise<DriveFileMetadata> => {
+  const boundary = `ramyeon-${crypto.randomUUID?.() || Date.now()}`;
+  const metadata = {
+    name: file.name,
+    mimeType: file.type || 'application/octet-stream',
+    parents: [folderId]
+  };
+
+  const body = new Blob(
+    [
+      `--${boundary}\r\n`,
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n',
+      `${JSON.stringify(metadata)}\r\n`,
+      `--${boundary}\r\n`,
+      `Content-Type: ${metadata.mimeType}\r\n\r\n`,
+      file,
+      '\r\n',
+      `--${boundary}--`
+    ],
+    { type: `multipart/related; boundary=${boundary}` }
+  );
+
+  const uploadResponse = await fetch(
+    `${UPLOAD_URL}?uploadType=multipart&fields=id,name,mimeType,thumbnailLink,webViewLink`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': `multipart/related; boundary=${boundary}`
+      },
+      body
+    }
+  );
+
+  if (!uploadResponse.ok) {
+    const errorText = await uploadResponse.text();
+    throw new Error(`Error uploading image: ${errorText || uploadResponse.statusText}`);
+  }
+
+  const data = (await uploadResponse.json()) as Partial<DriveFileMetadata>;
+  if (!data.id || !data.name || !data.mimeType) {
+    throw new Error('Invalid Drive upload response.');
+  }
+  return data as DriveFileMetadata;
+};
+
+export const fetchFileBlob = async (token: string, fileId: string) => {
+  const url = `${DOWNLOAD_URL}/${encodeURIComponent(fileId)}?alt=media`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Error downloading Drive image: ${errorText || response.statusText}`);
+  }
+
+  return response.blob();
+};

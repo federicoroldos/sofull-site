@@ -13,6 +13,7 @@ import type { User } from 'firebase/auth';
 
 const provider = new GoogleAuthProvider();
 provider.addScope('https://www.googleapis.com/auth/drive.appdata');
+provider.addScope('https://www.googleapis.com/auth/drive.file');
 provider.setCustomParameters({ prompt: 'select_account consent' });
 
 const ACCESS_TOKEN_KEY = 'ramyeon-google-access-token';
@@ -45,6 +46,7 @@ const persistToken = (token: string | null) => {
       JSON.stringify({ token, storedAt: Date.now() })
     );
   } catch {
+    // Ignore storage write failures.
   }
 };
 
@@ -106,12 +108,13 @@ export const useGoogleAuth = () => {
         const parsed = JSON.parse(raw) as { token: string; storedAt: number };
         if (!parsed?.token || typeof parsed.storedAt !== 'number') return;
         const expiresAt = parsed.storedAt + ACCESS_TOKEN_TTL_MS;
-        if (Date.now() >= expiresAt) {
-          expireToken();
-        }
-      } catch {
+      if (Date.now() >= expiresAt) {
+        expireToken();
       }
-    };
+    } catch {
+      // Ignore malformed local storage values.
+    }
+  };
     checkStoredExpiry();
     const interval = window.setInterval(() => {
       checkStoredExpiry();

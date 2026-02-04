@@ -1,9 +1,16 @@
-﻿import { useMemo, useState, useEffect } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import EntryCard from './components/EntryCard';
-import EntryFormModal from './components/EntryFormModal';
+import EntryFormModal, { type EntryFormSubmitValues } from './components/EntryFormModal';
 import { useGoogleAuth } from './hooks/useGoogleAuth';
-import { downloadFromAppData, ensureAppDataFile, uploadToAppData } from './utils/googleDriveClient';
-import { sanitizeEntries } from './utils/sanitize';
+import {
+  downloadFromAppData,
+  ensureAppDataFile,
+  ensureFolder,
+  fetchFileBlob,
+  uploadFileMultipart,
+  uploadToAppData
+} from './utils/googleDriveClient';
+import { sanitizeEntries, sanitizeUrl } from './utils/sanitize';
 import type { RamyeonDataFile, RamyeonEntry } from './types/ramyeon';
 
 const DEFAULT_DATA: RamyeonDataFile = {
@@ -26,6 +33,10 @@ const demoEntries: RamyeonEntry[] = [
     updatedAt: new Date().toISOString()
   }
 ];
+
+const DRIVE_ROOT_FOLDER_NAME = 'Ramyeon Dictionary';
+const DRIVE_IMAGE_FOLDER_NAME = 'images';
+const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
 
 const nowIso = () => new Date().toISOString();
 
@@ -69,6 +80,11 @@ const App = () => {
   const [driveFileId, setDriveFileId] = useState('');
   const [syncState, setSyncState] = useState<'idle' | 'loading' | 'saving' | 'error'>('idle');
   const [syncMessage, setSyncMessage] = useState('');
+  const [driveImageUrls, setDriveImageUrls] = useState<Record<string, string>>({});
+  const driveImageCacheRef = useRef(new Map<string, string>());
+  const driveImageLoadsRef = useRef(new Map<string, Promise<string>>());
+  const failedDriveImageRef = useRef(new Set<string>());
+  const imageFolderIdRef = useRef<string | null>(null);
 
   const isLoggedIn = Boolean(user && accessToken);
 
@@ -100,6 +116,14 @@ const App = () => {
     return sorted;
   }, [entries, isLoggedIn, query, sortMode, collatorEn, collatorKo]);
 
+  const resolveEntryImage = (entry: RamyeonEntry) => {
+    if (entry.imageDriveFileId) {
+      const driveSrc = driveImageUrls[entry.imageDriveFileId];
+      if (driveSrc) return driveSrc;
+    }
+    return sanitizeUrl(entry.imageUrl);
+  };
+
   const openCreate = () => {
     setEditingEntry(null);
     setModalOpen(true);
@@ -128,7 +152,7 @@ const App = () => {
       };
       await uploadToAppData(accessToken, driveFileId, JSON.stringify(payload, null, 2));
       setSyncState('idle');
-      setSyncMessage(`Last synced ${new Date().toLocaleTimeString()}`);
+      setSyncMessage(`Last synced ${new Date().toLocaleTimeString([], { hour12: false })}.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Drive sync failed.';
       setSyncState('error');
@@ -136,29 +160,87 @@ const App = () => {
     }
   };
 
-  const handleSaveEntry = (values: Omit<RamyeonEntry, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const ensureImageFolderId = async () => {
+    if (!accessToken) {
+      throw new Error('Google session expired. Sign in again and retry.');
+    }
+    if (imageFolderIdRef.current) {
+      return imageFolderIdRef.current;
+    }
+    const rootFolderId = await ensureFolder(accessToken, DRIVE_ROOT_FOLDER_NAME);
+    const imagesFolderId = await ensureFolder(accessToken, DRIVE_IMAGE_FOLDER_NAME, rootFolderId);
+    imageFolderIdRef.current = imagesFolderId;
+    return imagesFolderId;
+  };
+
+  const handleSaveEntry = async (values: EntryFormSubmitValues) => {
+    if (!accessToken) {
+      throw new Error('Google session expired. Sign in again before saving.');
+    }
+
+    let nextImageDriveFileId = editingEntry?.imageDriveFileId || '';
+    let nextImageMimeType = editingEntry?.imageMimeType || '';
+    let nextImageName = editingEntry?.imageName || '';
+    let nextImageUrl = values.imageUrl;
+
+    if (values.clearImage) {
+      nextImageDriveFileId = '';
+      nextImageMimeType = '';
+      nextImageName = '';
+      nextImageUrl = '';
+    }
+
+    if (values.imageFile) {
+      if (!values.imageFile.type.startsWith('image/')) {
+        throw new Error('Please choose a valid image file.');
+      }
+      if (values.imageFile.size > MAX_IMAGE_SIZE_BYTES) {
+        throw new Error('Image size must be 8MB or less.');
+      }
+      const folderId = await ensureImageFolderId();
+      const uploadedImage = await uploadFileMultipart(accessToken, values.imageFile, folderId);
+      nextImageDriveFileId = uploadedImage.id;
+      nextImageMimeType = uploadedImage.mimeType;
+      nextImageName = uploadedImage.name;
+    }
+
+    const entryPayload = {
+      name: values.name,
+      nameEnglish: values.nameEnglish,
+      brand: values.brand,
+      formFactor: values.formFactor,
+      rating: values.rating,
+      spiciness: values.spiciness,
+      description: values.description,
+      imageUrl: nextImageUrl,
+      imageDriveFileId: nextImageDriveFileId,
+      imageMimeType: nextImageMimeType,
+      imageName: nextImageName
+    };
+
     if (editingEntry) {
       const updatedEntry: RamyeonEntry = {
         ...editingEntry,
-        ...values,
+        ...entryPayload,
         updatedAt: nowIso()
       };
       const nextEntries = sanitizeEntries(
         entries.map((entry) => (entry.id === editingEntry.id ? updatedEntry : entry))
       );
       setEntries(nextEntries);
-      void saveToDrive(nextEntries);
+      await saveToDrive(nextEntries);
     } else {
       const newEntry: RamyeonEntry = {
         id: createId(),
         createdAt: nowIso(),
         updatedAt: nowIso(),
-        ...values
+        ...entryPayload
       };
       const nextEntries = sanitizeEntries([newEntry, ...entries]);
       setEntries(nextEntries);
-      void saveToDrive(nextEntries);
+      await saveToDrive(nextEntries);
     }
+
     closeModal();
   };
 
@@ -169,13 +251,33 @@ const App = () => {
     void saveToDrive(nextEntries);
   };
 
+  useEffect(() => () => {
+    for (const objectUrl of driveImageCacheRef.current.values()) {
+      URL.revokeObjectURL(objectUrl);
+    }
+    driveImageCacheRef.current.clear();
+    driveImageLoadsRef.current.clear();
+    failedDriveImageRef.current.clear();
+  }, []);
+
   useEffect(() => {
     if (!accessToken) {
-      setEntries([]);
-      setDriveFileId('');
-      setSyncState('idle');
-      setSyncMessage('');
-      return;
+      const resetStateTimer = window.setTimeout(() => {
+        setEntries([]);
+        setDriveFileId('');
+        setSyncState('idle');
+        setSyncMessage('');
+        setDriveImageUrls({});
+      }, 0);
+      imageFolderIdRef.current = null;
+
+      for (const objectUrl of driveImageCacheRef.current.values()) {
+        URL.revokeObjectURL(objectUrl);
+      }
+      driveImageCacheRef.current.clear();
+      driveImageLoadsRef.current.clear();
+      failedDriveImageRef.current.clear();
+      return () => window.clearTimeout(resetStateTimer);
     }
 
     let cancelled = false;
@@ -207,6 +309,80 @@ const App = () => {
       cancelled = true;
     };
   }, [accessToken]);
+
+  useEffect(() => {
+    const activeIds = new Set(
+      entries
+        .map((entry) => entry.imageDriveFileId)
+        .filter((fileId): fileId is string => Boolean(fileId))
+    );
+
+    let changed = false;
+    for (const [fileId, objectUrl] of driveImageCacheRef.current.entries()) {
+      if (activeIds.has(fileId)) continue;
+      URL.revokeObjectURL(objectUrl);
+      driveImageCacheRef.current.delete(fileId);
+      driveImageLoadsRef.current.delete(fileId);
+      failedDriveImageRef.current.delete(fileId);
+      changed = true;
+    }
+
+    if (changed) {
+      setDriveImageUrls(Object.fromEntries(driveImageCacheRef.current.entries()));
+    }
+  }, [entries]);
+
+  useEffect(() => {
+    if (!accessToken) return;
+
+    const missingIds = Array.from(
+      new Set(
+        entries
+          .map((entry) => entry.imageDriveFileId)
+          .filter((fileId): fileId is string => {
+            if (!fileId) return false;
+            if (driveImageCacheRef.current.has(fileId)) return false;
+            if (driveImageLoadsRef.current.has(fileId)) return false;
+            if (failedDriveImageRef.current.has(fileId)) return false;
+            return true;
+          })
+      )
+    );
+
+    if (missingIds.length === 0) return;
+
+    let cancelled = false;
+    const loadImage = async (fileId: string) => {
+      const request = fetchFileBlob(accessToken, fileId)
+        .then((blob) => {
+          const objectUrl = URL.createObjectURL(blob);
+          if (cancelled) {
+            URL.revokeObjectURL(objectUrl);
+            return '';
+          }
+          driveImageCacheRef.current.set(fileId, objectUrl);
+          return objectUrl;
+        })
+        .catch(() => {
+          failedDriveImageRef.current.add(fileId);
+          return '';
+        })
+        .finally(() => {
+          driveImageLoadsRef.current.delete(fileId);
+        });
+      driveImageLoadsRef.current.set(fileId, request);
+      return request;
+    };
+
+    void Promise.all(missingIds.map((fileId) => loadImage(fileId))).then(() => {
+      if (cancelled) return;
+      setDriveImageUrls(Object.fromEntries(driveImageCacheRef.current.entries()));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [entries, accessToken]);
 
   return (
     <div className="app">
@@ -290,6 +466,7 @@ const App = () => {
             <EntryCard
               key={entry.id}
               entry={entry}
+              driveImageUrl={resolveEntryImage(entry)}
               onEdit={openEdit}
               onDelete={handleDelete}
               canEdit={isLoggedIn}
@@ -301,6 +478,7 @@ const App = () => {
       <EntryFormModal
         isOpen={modalOpen}
         initial={editingEntry}
+        initialImageSrc={editingEntry ? resolveEntryImage(editingEntry) : ''}
         onClose={closeModal}
         onSave={handleSaveEntry}
       />

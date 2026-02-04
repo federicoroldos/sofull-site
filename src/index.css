@@ -57,7 +57,7 @@ body {
 
 .app__eyebrow {
   font-family: 'Nanum Pen Script', cursive;
-  font-size: 18px;
+  font-size: 50px;
   letter-spacing: 1px;
   text-transform: uppercase;
   margin: 0 0 6px;
@@ -171,6 +171,11 @@ h1 {
 .button--ghost {
   background: transparent;
   color: var(--ink);
+}
+
+.button--compact {
+  padding: 8px 14px;
+  white-space: nowrap;
 }
 
 .text-button {
@@ -487,6 +492,16 @@ textarea {
   gap: 6px;
 }
 
+.field__row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.field__row input {
+  flex: 1;
+}
+
 .field--inline {
   flex-direction: row;
   align-items: center;
@@ -522,6 +537,15 @@ textarea {
 .form-error {
   color: var(--accent-dark);
   margin: 0;
+}
+
+.modal__image-preview {
+  width: 120px;
+  height: 120px;
+}
+
+.modal__image-field {
+  align-items: center;
 }
 
 .sr-only {
