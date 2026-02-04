@@ -11,6 +11,9 @@ export interface RamyeonEntry {
   spiciness: SpicinessLevel;
   description?: string;
   imageUrl?: string;
+  imageDriveFileId?: string;
+  imageMimeType?: string;
+  imageName?: string;
   createdAt: string;
   updatedAt: string;
 }

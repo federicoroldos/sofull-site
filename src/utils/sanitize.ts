@@ -4,12 +4,22 @@ const MAX_NAME = 80;
 const MAX_BRAND = 60;
 const MAX_DESCRIPTION = 280;
 const MAX_IMAGE_URL = 2048;
+const MAX_DRIVE_FILE_ID = 256;
+const MAX_IMAGE_MIME_TYPE = 100;
+const MAX_IMAGE_NAME = 180;
 
-const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+const stripControlChars = (value: string) =>
+  value
+    .split('')
+    .filter((char) => {
+      const code = char.charCodeAt(0);
+      return !((code >= 0 && code <= 8) || code === 11 || code === 12 || (code >= 14 && code <= 31) || code === 127);
+    })
+    .join('');
 
 const sanitizeText = (value: unknown, maxLength: number) => {
   if (typeof value !== 'string') return '';
-  const cleaned = value.replace(CONTROL_CHARS, '').trim();
+  const cleaned = stripControlChars(value).trim();
   return cleaned.length > maxLength ? cleaned.slice(0, maxLength) : cleaned;
 };
 
@@ -54,6 +64,9 @@ export const sanitizeEntry = (value: unknown): RamyeonEntry | null => {
     spiciness: sanitizeSpiciness(entry.spiciness),
     description: sanitizeText(entry.description, MAX_DESCRIPTION),
     imageUrl: sanitizeUrl(entry.imageUrl),
+    imageDriveFileId: sanitizeText(entry.imageDriveFileId, MAX_DRIVE_FILE_ID),
+    imageMimeType: sanitizeText(entry.imageMimeType, MAX_IMAGE_MIME_TYPE),
+    imageName: sanitizeText(entry.imageName, MAX_IMAGE_NAME),
     createdAt: sanitizeText(entry.createdAt, 40) || new Date().toISOString(),
     updatedAt: sanitizeText(entry.updatedAt, 40) || new Date().toISOString()
   };

@@ -5,15 +5,16 @@ import type { RamyeonEntry } from '../types/ramyeon';
 
 interface Props {
   entry: RamyeonEntry;
+  driveImageUrl?: string;
   onEdit: (entry: RamyeonEntry) => void;
   onDelete: (entry: RamyeonEntry) => void;
   canEdit: boolean;
 }
 
-const EntryCard = ({ entry, onEdit, onDelete, canEdit }: Props) => {
+const EntryCard = ({ entry, driveImageUrl, onEdit, onDelete, canEdit }: Props) => {
   const hasEnglish = entry.nameEnglish && entry.nameEnglish.trim().length > 0;
   const displayName = hasEnglish ? `${entry.name} (${entry.nameEnglish})` : entry.name;
-  const imageUrl = sanitizeUrl(entry.imageUrl);
+  const imageUrl = driveImageUrl || sanitizeUrl(entry.imageUrl);
 
   return (
     <article className="entry-card">
