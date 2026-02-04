@@ -39,6 +39,11 @@ const DRIVE_IMAGE_FOLDER_NAME = 'images';
 const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
 
 const nowIso = () => new Date().toISOString();
+type SortMode = 'latest' | 'rating' | 'alpha-ko' | 'alpha-en';
+const createdAtToMs = (entry: RamyeonEntry) => {
+  const timestamp = Date.parse(entry.createdAt);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+};
 
 const parseDataFile = (payload: string): RamyeonDataFile => {
   if (!payload || payload.trim().length === 0) {
@@ -73,7 +78,7 @@ const App = () => {
     signOut
   } = useGoogleAuth();
   const [entries, setEntries] = useState<RamyeonEntry[]>([]);
-  const [sortMode, setSortMode] = useState<'alpha-en' | 'alpha-ko' | 'rating'>('alpha-ko');
+  const [sortMode, setSortMode] = useState<SortMode>('latest');
   const [query, setQuery] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<RamyeonEntry | null>(null);
@@ -104,14 +109,28 @@ const App = () => {
     });
 
     const sorted = [...filtered];
-    if (sortMode === 'rating') {
-      sorted.sort((a, b) => b.rating - a.rating || collatorKo.compare(a.name, b.name));
+    if (sortMode === 'latest') {
+      sorted.sort(
+        (a, b) =>
+          createdAtToMs(b) - createdAtToMs(a) ||
+          collatorKo.compare(a.name, b.name) ||
+          a.id.localeCompare(b.id)
+      );
+    } else if (sortMode === 'rating') {
+      sorted.sort(
+        (a, b) =>
+          b.rating - a.rating ||
+          collatorKo.compare(a.name, b.name) ||
+          a.id.localeCompare(b.id)
+      );
     } else if (sortMode === 'alpha-en') {
       sorted.sort((a, b) =>
-        collatorEn.compare(a.nameEnglish || a.name, b.nameEnglish || b.name)
+        collatorEn.compare(a.nameEnglish || a.name, b.nameEnglish || b.name) ||
+        collatorKo.compare(a.name, b.name) ||
+        a.id.localeCompare(b.id)
       );
     } else {
-      sorted.sort((a, b) => collatorKo.compare(a.name, b.name));
+      sorted.sort((a, b) => collatorKo.compare(a.name, b.name) || a.id.localeCompare(b.id));
     }
     return sorted;
   }, [entries, isLoggedIn, query, sortMode, collatorEn, collatorKo]);
@@ -433,10 +452,11 @@ const App = () => {
         <div className="toolbar__right">
           <label className="sort">
             <span>Sort</span>
-            <select value={sortMode} onChange={(event) => setSortMode(event.target.value as typeof sortMode)}>
+            <select value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)}>
+              <option value="latest">Latest</option>
+              <option value="rating">Best rated</option>
               <option value="alpha-ko">Alphabetical (Hangul)</option>
               <option value="alpha-en">Alphabetical (English)</option>
-              <option value="rating">Best rated</option>
             </select>
           </label>
         </div>

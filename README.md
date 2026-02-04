@@ -10,7 +10,7 @@ Try it out [here](https://federicoroldos.github.io/ramyeon-dictionary/).
 - Google Drive `appDataFolder` sync (JSON file auto-created and updated on every change).
 - CRUD operations: add, edit, delete entries with confirmation.
 - 5-star rating with half-star support.
-- Sorting: alphabetical (Korean or English) and best rated.
+- Sorting options in order: Latest, Best rated, Alphabetical (Hangul), Alphabetical (English).
 - Optional search by name or brand.
 
 ## Local Setup
