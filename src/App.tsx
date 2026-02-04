@@ -410,7 +410,7 @@ const App = () => {
           <p className="app__eyebrow">라면 사전</p>
           <h1>Ramyeon Dictionary</h1>
           <p className="app__subtitle">
-            Track and rate the ramyeon you’ve tried
+            Track and rate the ramyeon you’ve tried!
           </p>
         </div>
         <div className="auth">
