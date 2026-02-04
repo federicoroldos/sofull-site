@@ -416,7 +416,7 @@ const App = () => {
       <section className="toolbar">
         <div className="toolbar__left">
           <button className="button" onClick={openCreate} disabled={!isLoggedIn}>
-            Add Ramyeon
+            Add ramyeon
           </button>
           <div className="field field--search">
             <label htmlFor="search" className="sr-only">
