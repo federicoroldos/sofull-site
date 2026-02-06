@@ -1,11 +1,11 @@
-﻿# Ramyeon Dictionary
+﻿# 배불러! (So Full!)
 
-A personal dictionary for Korean ramyeon noodles with Google sign-in and Google Drive persistence.
+A personal food & drink log for ramyeon, snacks, drinks, and ice cream with Google sign-in and Google Drive persistence.
 Try it out [here](https://federicoroldos.github.io/ramyeon-dictionary/).
 
 ## Features
 
-- Dictionary-style list of ramyeon entries with name, brand, form factor, rating, and spiciness.
+- List-style view of food and drink entries (ramyeon, snacks, drinks, and ice cream) with name, brand, category, rating, and category-specific attributes.
 - Google sign-in to uniquely identify each user.
 - Google Drive `appDataFolder` sync (JSON file auto-created and updated on every change).
 - CRUD operations: add, edit, delete entries with confirmation.
@@ -54,7 +54,7 @@ This project follows the same Firebase + Google Drive appDataFolder flow used in
 
 ## Data Storage
 
-Ramyeon data is stored as a JSON file inside the user's Google Drive `appDataFolder`.
+Entry data is stored as a JSON file inside the user's Google Drive `appDataFolder`.
 The file is created automatically on first login and updated on every create, edit, or delete.
 
 ## Notes
@@ -62,3 +62,4 @@ The file is created automatically on first login and updated on every create, ed
 - If you refresh and Drive actions stop working, sign out and sign back in to refresh the access token.
 - The app includes a demo entry when signed out to show the layout.
 - For security, image URLs must use `https://` (non-HTTPS URLs are rejected).
+

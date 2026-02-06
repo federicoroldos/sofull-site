@@ -139,10 +139,15 @@ export const ensureFolder = async (token: string, name: string, parentId?: strin
   return createdFolder.id;
 };
 
-export const uploadFileMultipart = async (token: string, file: File, folderId: string): Promise<DriveFileMetadata> => {
+export const uploadFileMultipart = async (
+  token: string,
+  file: File,
+  folderId: string,
+  nameOverride?: string
+): Promise<DriveFileMetadata> => {
   const boundary = `ramyeon-${crypto.randomUUID?.() || Date.now()}`;
   const metadata = {
-    name: file.name,
+    name: nameOverride?.trim() || file.name,
     mimeType: file.type || 'application/octet-stream',
     parents: [folderId]
   };
@@ -200,4 +205,19 @@ export const fetchFileBlob = async (token: string, fileId: string) => {
   }
 
   return response.blob();
+};
+
+export const deleteDriveFile = async (token: string, fileId: string) => {
+  const url = `${FILES_URL}/${encodeURIComponent(fileId)}`;
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Error deleting Drive file: ${errorText || response.statusText}`);
+  }
 };

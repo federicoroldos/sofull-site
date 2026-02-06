@@ -1,4 +1,4 @@
-﻿@import url('https://fonts.googleapis.com/css2?family=Nanum+Pen+Script&family=Nunito:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Nanum+Pen+Script&family=Nunito:wght@400;600;700&display=swap');
 
 :root {
   color-scheme: light;
@@ -12,7 +12,6 @@
   --star-muted: #b8b8b8;
   --outline: #22333a;
   --card: #fffdf8;
-  --success: #2f5d45;
   font-family: 'Nunito', system-ui, sans-serif;
   background: var(--paper);
   color: var(--ink);
@@ -57,16 +56,16 @@ body {
 
 .app__eyebrow {
   font-family: 'Nanum Pen Script', cursive;
-  font-size: 50px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
+  font-size: 25px;
+  letter-spacing: 0.5px;
+  text-transform: none;
   margin: 0 0 6px;
   color: var(--muted);
 }
 
 h1 {
   font-family: 'Nanum Pen Script', cursive;
-  font-size: clamp(36px, 5vw, 64px);
+  font-size: clamp(60px, 5vw, 64px);
   margin: 0 0 8px;
 }
 
@@ -303,13 +302,15 @@ textarea {
 }
 
 .entry-card__actions {
-  display: flex;
-  gap: 8px;
-}
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+  }
 
 .rating {
   display: flex;
   gap: 6px;
+  align-items: center;
 }
 
 .rating__star {
@@ -374,6 +375,7 @@ textarea {
 }
 
 .spice__pepper {
+  display: inline-block;
   width: 18px;
   height: 24px;
   background-image: url('/pepper.svg');
@@ -385,8 +387,52 @@ textarea {
   transform: rotate(-12deg);
 }
 
-.spice__pepper::after {
-  content: none;
+.spice__pepper--zero {
+  background-image: url('/pepper-zero.svg');
+}
+
+.spice__pepper--zero-ice-cream {
+  background-image: url('/cream-zero.svg');
+  transform: none;
+}
+
+.spice__pepper--zero-drink {
+  background-image: url('/sweet-zero.svg');
+  transform: none;
+}
+
+.spice__pepper--zero-snack {
+  background-image: url('/crunch-zero.svg');
+  transform: none;
+}
+
+
+.rating--sm .spice__pepper {
+  width: 16px;
+  height: 16px;
+}
+
+.rating--lg .spice__pepper {
+  width: 26px;
+  height: 26px;
+}
+
+.spice__pepper--snack {
+  background-image: url('/crunch.svg');
+}
+
+.spice__pepper--drink {
+  background-image: url('/sweet.svg');
+}
+
+.spice__pepper--ice-cream {
+  background-image: url('/cream.svg');
+}
+
+.spice__pepper--snack,
+.spice__pepper--drink,
+.spice__pepper--ice-cream {
+  transform: none;
 }
 
 .spice__pepper--on {
