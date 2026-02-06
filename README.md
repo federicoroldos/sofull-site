@@ -1,7 +1,7 @@
 ﻿# 배불러! (So Full!)
 
 A personal food & drink log for ramyeon, snacks, drinks, and ice cream with Google sign-in and Google Drive persistence.
-Try it out [here](https://federicoroldos.github.io/ramyeon-dictionary/).
+Try it out [here](https://sofull.site).
 
 ## Features
 
