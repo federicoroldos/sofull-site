@@ -34,6 +34,20 @@ const demoEntries: RamyeonEntry[] = [
     description: 'Clean beefy broth, gentle spice, and a chewy bite.',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'demo-2',
+    name: '바나나우유',
+    nameEnglish: 'Banana Milk',
+    brand: 'Binggrae',
+    category: 'drink',
+    formFactor: 'cup',
+    iceCreamFormFactor: 'cream',
+    rating: 5,
+    spiciness: 'hot',
+    description: 'Sweet, creamy, banana-flavored milk.',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   }
 ];
 
