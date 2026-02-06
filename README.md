@@ -1,17 +1,32 @@
 ﻿# 배불러! (So Full!)
 
-A personal food & drink log for ramyeon, snacks, drinks, and ice cream with Google sign-in and Google Drive persistence.
+A personal food & drink log for ramyeon, snacks, drinks, and ice cream.
 Try it out [here](https://sofull.site).
 
-## Features
+## What It Does
 
-- List-style view of food and drink entries (ramyeon, snacks, drinks, and ice cream) with name, brand, category, rating, and category-specific attributes.
-- Google sign-in to uniquely identify each user.
-- Google Drive `appDataFolder` sync (JSON file auto-created and updated on every change).
-- CRUD operations: add, edit, delete entries with confirmation.
-- 5-star rating with half-star support.
-- Sorting options in order: Latest, Best rated, Alphabetical (Hangul), Alphabetical (English).
-- Optional search by name or brand.
+- Log entries with name, brand, category, rating, and category-specific details.
+- Track ramyeon form factor (packet/cup), ice cream form factor (bar/cream), and spiciness levels.
+- Add optional descriptions and images (URL or upload).
+- Sort by latest, best rated, or alphabetical (Hangul/English).
+- Search by name or brand.
+- Edit or delete entries with confirmation.
+
+## How It Works
+
+This is a fully client-side app. Google Sign-In identifies the user, and a JSON file is stored
+in Google Drive `appDataFolder`. The file is created on first login and updated on every change.
+If you upload an image, it is stored in your Google Drive in a `배불러! (So Full!)/images` folder
+and referenced by its Drive file ID. If you use an image URL, it must be `https://`.
+When signed out, the app shows a demo entry to preview the layout.
+
+## Idea Evolution
+
+This started as a tiny ramyeon-only list to remember favorite packs and cups. Once it was useful
+for rankings and rebuys, it expanded to cover snacks, drinks, and ice cream so the same workflow
+could capture the full convenience-store haul. Ratings and attribute tags made comparisons easier,
+Drive-based storage kept the data private and portable, and image support turned the log into a
+memory of what each item looked like.
 
 ## Local Setup
 
@@ -37,14 +52,13 @@ npm run dev
 
 ## Google OAuth + Drive Configuration
 
-This project follows the same Firebase + Google Drive appDataFolder flow used in the reference project.
-
 1. Create a Firebase project.
 2. Enable **Google** as a Sign-in provider in Firebase Authentication.
 3. In Google Cloud Console for the same project:
    - Enable the **Google Drive API**.
    - Configure the OAuth consent screen.
    - Add the scope `https://www.googleapis.com/auth/drive.appdata`.
+   - Add the scope `https://www.googleapis.com/auth/drive.file`.
 4. Add your local dev domain in Firebase Auth (e.g. `localhost`).
 5. Copy the Firebase web app config values into `.env`:
    - `VITE_FIREBASE_API_KEY`
@@ -52,14 +66,7 @@ This project follows the same Firebase + Google Drive appDataFolder flow used in
    - `VITE_FIREBASE_PROJECT_ID`
    - `VITE_FIREBASE_APP_ID`
 
-## Data Storage
-
-Entry data is stored as a JSON file inside the user's Google Drive `appDataFolder`.
-The file is created automatically on first login and updated on every create, edit, or delete.
-
 ## Notes
 
 - If you refresh and Drive actions stop working, sign out and sign back in to refresh the access token.
-- The app includes a demo entry when signed out to show the layout.
 - For security, image URLs must use `https://` (non-HTTPS URLs are rejected).
-
