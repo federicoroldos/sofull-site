@@ -1,4 +1,6 @@
-import type { FormFactor, RamyeonEntry, SpicinessLevel } from '../types/ramyeon';
+﻿import type { EntryCategory, FormFactor, RamyeonEntry, SpicinessLevel } from '../types/ramyeon';
+
+import type { IceCreamFormFactor } from '../types/ramyeon';
 
 const MAX_NAME = 80;
 const MAX_BRAND = 60;
@@ -105,13 +107,21 @@ const sanitizeRating = (value: unknown) => {
 };
 
 const FORM_FACTORS: FormFactor[] = ['packet', 'cup'];
+const ICE_CREAM_FORM_FACTORS: IceCreamFormFactor[] = ['bar', 'cream'];
 const SPICINESS: SpicinessLevel[] = ['not-spicy', 'mild', 'medium', 'hot', 'extreme'];
+const CATEGORIES: EntryCategory[] = ['ramyeon', 'snack', 'drink', 'ice_cream'];
 
 const sanitizeFormFactor = (value: unknown): FormFactor =>
   FORM_FACTORS.includes(value as FormFactor) ? (value as FormFactor) : 'packet';
 
+const sanitizeIceCreamFormFactor = (value: unknown): IceCreamFormFactor =>
+  ICE_CREAM_FORM_FACTORS.includes(value as IceCreamFormFactor) ? (value as IceCreamFormFactor) : 'bar';
+
 const sanitizeSpiciness = (value: unknown): SpicinessLevel =>
   SPICINESS.includes(value as SpicinessLevel) ? (value as SpicinessLevel) : 'mild';
+
+const sanitizeCategory = (value: unknown): EntryCategory =>
+  CATEGORIES.includes(value as EntryCategory) ? (value as EntryCategory) : 'ramyeon';
 
 export const sanitizeUrl = (value: unknown) => {
   if (typeof value !== 'string') return '';
@@ -147,7 +157,9 @@ export const sanitizeEntry = (value: unknown): RamyeonEntry | null => {
     name: sanitizeText(entry.name, MAX_NAME),
     nameEnglish: sanitizeText(entry.nameEnglish, MAX_NAME),
     brand: sanitizeText(entry.brand, MAX_BRAND),
+    category: sanitizeCategory(entry.category),
     formFactor: sanitizeFormFactor(entry.formFactor),
+    iceCreamFormFactor: sanitizeIceCreamFormFactor(entry.iceCreamFormFactor),
     rating: sanitizeRating(entry.rating),
     spiciness: sanitizeSpiciness(entry.spiciness),
     description: sanitizeText(entry.description, MAX_DESCRIPTION),

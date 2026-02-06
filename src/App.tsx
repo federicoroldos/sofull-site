@@ -3,6 +3,7 @@ import EntryCard from './components/EntryCard';
 import EntryFormModal, { type EntryFormSubmitValues } from './components/EntryFormModal';
 import { useGoogleAuth } from './hooks/useGoogleAuth';
 import {
+  deleteDriveFile,
   downloadFromAppData,
   ensureAppDataFile,
   ensureFolder,
@@ -10,8 +11,8 @@ import {
   uploadFileMultipart,
   uploadToAppData
 } from './utils/googleDriveClient';
-import { sanitizeEntries, sanitizeUrl } from './utils/sanitize';
-import type { RamyeonDataFile, RamyeonEntry } from './types/ramyeon';
+import { sanitizeEntries } from './utils/sanitize';
+import type { RamyeonDataFile, RamyeonEntry, SpicinessLevel } from './types/ramyeon';
 
 const DEFAULT_DATA: RamyeonDataFile = {
   version: 1,
@@ -25,7 +26,9 @@ const demoEntries: RamyeonEntry[] = [
     name: '신라면',
     nameEnglish: 'Shin Ramyeon',
     brand: 'Ottogi',
+    category: 'ramyeon',
     formFactor: 'packet',
+    iceCreamFormFactor: 'bar',
     rating: 4,
     spiciness: 'medium',
     description: 'Clean beefy broth, gentle spice, and a chewy bite.',
@@ -34,16 +37,47 @@ const demoEntries: RamyeonEntry[] = [
   }
 ];
 
-const DRIVE_ROOT_FOLDER_NAME = 'Ramyeon Dictionary';
+const DRIVE_ROOT_FOLDER_NAME = '배불러! (So Full!)';
 const DRIVE_IMAGE_FOLDER_NAME = 'images';
 const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
 
 const nowIso = () => new Date().toISOString();
-type SortMode = 'latest' | 'rating' | 'alpha-ko' | 'alpha-en';
+type SortMode =
+  | 'latest'
+  | 'rating'
+  | 'most-spicy'
+  | 'most-crunchy'
+  | 'most-sweet'
+  | 'most-creamy'
+  | 'alpha-ko'
+  | 'alpha-en';
+type CategoryFilter = 'all' | 'ramyeon' | 'snack' | 'drink' | 'ice_cream';
+const SPICE_ORDER: Record<SpicinessLevel, number> = {
+  'not-spicy': 0,
+  mild: 1,
+  medium: 2,
+  hot: 3,
+  extreme: 4
+};
+const ATTRIBUTE_SORT_BY_CATEGORY: Record<
+  CategoryFilter,
+  { sortMode: SortMode; label: string } | null
+> = {
+  all: null,
+  ramyeon: { sortMode: 'most-spicy', label: 'Most spicy' },
+  snack: { sortMode: 'most-crunchy', label: 'Most crunchy' },
+  drink: { sortMode: 'most-sweet', label: 'Most sweet' },
+  ice_cream: { sortMode: 'most-creamy', label: 'Most creamy' }
+};
 const createdAtToMs = (entry: RamyeonEntry) => {
   const timestamp = Date.parse(entry.createdAt);
   return Number.isFinite(timestamp) ? timestamp : 0;
 };
+const isAttributeSort = (mode: SortMode) =>
+  mode === 'most-spicy' ||
+  mode === 'most-crunchy' ||
+  mode === 'most-sweet' ||
+  mode === 'most-creamy';
 
 const parseDataFile = (payload: string): RamyeonDataFile => {
   if (!payload || payload.trim().length === 0) {
@@ -65,6 +99,15 @@ const parseDataFile = (payload: string): RamyeonDataFile => {
 };
 
 const createId = () => (crypto?.randomUUID ? crypto.randomUUID() : `ramyeon-${Date.now()}`);
+const normalizeFileNamePart = (value: string) => value.replace(/[\\/]+/g, '-').replace(/\s+/g, ' ').trim();
+const buildImageFileName = (name: string, nameEnglish: string, originalFileName: string) => {
+  const koreanName = normalizeFileNamePart(name);
+  const englishName = normalizeFileNamePart(nameEnglish);
+  const baseName = englishName ? `${koreanName} (${englishName})` : koreanName;
+  const extensionMatch = originalFileName.match(/\.[a-zA-Z0-9]+$/);
+  const extension = extensionMatch ? extensionMatch[0] : '';
+  return `${baseName}${extension}`;
+};
 
 const App = () => {
   const {
@@ -79,6 +122,7 @@ const App = () => {
   } = useGoogleAuth();
   const [entries, setEntries] = useState<RamyeonEntry[]>([]);
   const [sortMode, setSortMode] = useState<SortMode>('latest');
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
   const [query, setQuery] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<RamyeonEntry | null>(null);
@@ -95,10 +139,21 @@ const App = () => {
 
   const collatorEn = useMemo(() => new Intl.Collator('en', { sensitivity: 'base' }), []);
   const collatorKo = useMemo(() => new Intl.Collator('ko', { sensitivity: 'base' }), []);
+  const attributeSortOption = ATTRIBUTE_SORT_BY_CATEGORY[categoryFilter];
+  const handleCategoryChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextCategory = event.target.value as CategoryFilter;
+    setCategoryFilter(nextCategory);
+    const nextAttributeSort = ATTRIBUTE_SORT_BY_CATEGORY[nextCategory];
+    if (isAttributeSort(sortMode) && (!nextAttributeSort || nextAttributeSort.sortMode !== sortMode)) {
+      setSortMode('latest');
+    }
+  };
 
   const visibleEntries = useMemo(() => {
     const source = entries.length > 0 ? entries : isLoggedIn ? [] : demoEntries;
     const filtered = source.filter((entry) => {
+      const effectiveCategory = entry.category ?? 'ramyeon';
+      if (categoryFilter !== 'all' && effectiveCategory !== categoryFilter) return false;
       if (!query.trim()) return true;
       const q = query.toLowerCase();
       return (
@@ -123,6 +178,18 @@ const App = () => {
           collatorKo.compare(a.name, b.name) ||
           a.id.localeCompare(b.id)
       );
+    } else if (isAttributeSort(sortMode)) {
+      sorted.sort(
+        (a, b) => {
+          const spiceA = a.spiciness ? SPICE_ORDER[a.spiciness] ?? 0 : 0;
+          const spiceB = b.spiciness ? SPICE_ORDER[b.spiciness] ?? 0 : 0;
+          return (
+            spiceB - spiceA ||
+            collatorKo.compare(a.name, b.name) ||
+            a.id.localeCompare(b.id)
+          );
+        }
+      );
     } else if (sortMode === 'alpha-en') {
       sorted.sort((a, b) =>
         collatorEn.compare(a.nameEnglish || a.name, b.nameEnglish || b.name) ||
@@ -133,14 +200,14 @@ const App = () => {
       sorted.sort((a, b) => collatorKo.compare(a.name, b.name) || a.id.localeCompare(b.id));
     }
     return sorted;
-  }, [entries, isLoggedIn, query, sortMode, collatorEn, collatorKo]);
+  }, [entries, isLoggedIn, query, sortMode, categoryFilter, collatorEn, collatorKo]);
 
   const resolveEntryImage = (entry: RamyeonEntry) => {
     if (entry.imageDriveFileId) {
       const driveSrc = driveImageUrls[entry.imageDriveFileId];
       if (driveSrc) return driveSrc;
     }
-    return sanitizeUrl(entry.imageUrl);
+    return entry.imageUrl ?? '';
   };
 
   const openCreate = () => {
@@ -203,6 +270,9 @@ const App = () => {
     let nextImageUrl = values.imageUrl;
 
     if (values.clearImage) {
+      if (editingEntry?.imageDriveFileId) {
+        await deleteDriveFile(accessToken, editingEntry.imageDriveFileId);
+      }
       nextImageDriveFileId = '';
       nextImageMimeType = '';
       nextImageName = '';
@@ -217,17 +287,23 @@ const App = () => {
         throw new Error('Image size must be 8MB or less.');
       }
       const folderId = await ensureImageFolderId();
-      const uploadedImage = await uploadFileMultipart(accessToken, values.imageFile, folderId);
+      const imageName = buildImageFileName(values.name, values.nameEnglish, values.imageFile.name);
+      const uploadedImage = await uploadFileMultipart(accessToken, values.imageFile, folderId, imageName);
       nextImageDriveFileId = uploadedImage.id;
       nextImageMimeType = uploadedImage.mimeType;
       nextImageName = uploadedImage.name;
+      if (editingEntry?.imageDriveFileId) {
+        await deleteDriveFile(accessToken, editingEntry.imageDriveFileId);
+      }
     }
 
     const entryPayload = {
       name: values.name,
       nameEnglish: values.nameEnglish,
       brand: values.brand,
+      category: values.category,
       formFactor: values.formFactor,
+      iceCreamFormFactor: values.iceCreamFormFactor,
       rating: values.rating,
       spiciness: values.spiciness,
       description: values.description,
@@ -267,7 +343,18 @@ const App = () => {
     if (!window.confirm(`Delete ${entry.name}?`)) return;
     const nextEntries = entries.filter((item) => item.id !== entry.id);
     setEntries(nextEntries);
-    void saveToDrive(nextEntries);
+    void (async () => {
+      await saveToDrive(nextEntries);
+      if (accessToken && entry.imageDriveFileId) {
+        try {
+          await deleteDriveFile(accessToken, entry.imageDriveFileId);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Drive image delete failed.';
+          setSyncState('error');
+          setSyncMessage(message);
+        }
+      }
+    })();
   };
 
   useEffect(() => () => {
@@ -407,10 +494,10 @@ const App = () => {
     <div className="app">
       <header className="app__header">
         <div>
-          <p className="app__eyebrow">라면 사전</p>
-          <h1>Ramyeon Dictionary</h1>
+          <p className="app__eyebrow">So Full!</p>
+          <h1>배불러!</h1>
           <p className="app__subtitle">
-            Track and rate the ramyeon you’ve tried!
+            Add and rate the ramyeon, snacks, drinks, and ice creams you've tried!
           </p>
         </div>
         <div className="auth">
@@ -435,7 +522,7 @@ const App = () => {
       <section className="toolbar">
         <div className="toolbar__left">
           <button className="button" onClick={openCreate} disabled={!isLoggedIn}>
-            Add ramyeon
+            Add item
           </button>
           <div className="field field--search">
             <label htmlFor="search" className="sr-only">
@@ -443,7 +530,7 @@ const App = () => {
             </label>
             <input
               id="search"
-              placeholder="Search by name or brand"
+              placeholder="Search items by name or brand"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
@@ -451,10 +538,26 @@ const App = () => {
         </div>
         <div className="toolbar__right">
           <label className="sort">
+            <span>Category</span>
+            <select
+              value={categoryFilter}
+              onChange={handleCategoryChange}
+            >
+              <option value="all">All</option>
+              <option value="ramyeon">Ramyeon</option>
+              <option value="snack">Snack</option>
+              <option value="drink">Drink</option>
+              <option value="ice_cream">Ice Cream</option>
+            </select>
+          </label>
+          <label className="sort">
             <span>Sort</span>
             <select value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)}>
               <option value="latest">Latest</option>
               <option value="rating">Best rated</option>
+              {attributeSortOption && (
+                <option value={attributeSortOption.sortMode}>{attributeSortOption.label}</option>
+              )}
               <option value="alpha-ko">Alphabetical (Hangul)</option>
               <option value="alpha-en">Alphabetical (English)</option>
             </select>
@@ -465,7 +568,7 @@ const App = () => {
       <section className="status">
         {!isLoggedIn && (
           <p className={`status__message ${authError ? 'status__message--error' : ''}`}>
-            {authError || 'Sign in to add, edit, and sync your ramyeon list.'}
+            {authError || 'Sign in to add, edit, and sync your food & drink list.'}
           </p>
         )}
         {isLoggedIn && (
@@ -478,8 +581,8 @@ const App = () => {
       <main className="list">
         {visibleEntries.length === 0 ? (
           <div className="empty-state">
-            <p>No ramyeon entries yet.</p>
-            <p>Add your first one to start the dictionary.</p>
+            <p>No entries yet.</p>
+            <p>Add your first item to start your list.</p>
           </div>
         ) : (
           visibleEntries.map((entry) => (
@@ -515,7 +618,15 @@ const App = () => {
               <button className="button button--ghost" onClick={clearTokenExpired}>
                 Dismiss
               </button>
-              <button className="button" onClick={() => window.location.reload()}>
+              <button
+                className="button"
+                onClick={() => {
+                  if (authLoading) return;
+                  clearTokenExpired();
+                  void signIn();
+                }}
+                disabled={authLoading}
+              >
                 Refresh & sign in
               </button>
             </div>
