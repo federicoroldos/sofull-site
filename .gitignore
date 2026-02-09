@@ -24,3 +24,10 @@ docs
 *.sln
 *.sw?
 /.env
+.env.*
+*.pem
+*.key
+*.p12
+*.crt
+firebase-adminsdk*.json
+service-account*.json
