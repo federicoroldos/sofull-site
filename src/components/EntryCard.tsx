@@ -1,12 +1,12 @@
-import AttributeMeter from './AttributeMeter';
+﻿import AttributeMeter from './AttributeMeter';
 import RatingStars from './RatingStars';
-import type { EntryCategory, RamyeonEntry } from '../types/ramyeon';
+import type { EntryCategory, SofullEntry } from '../types/sofull';
 
 interface Props {
-  entry: RamyeonEntry;
+  entry: SofullEntry;
   driveImageUrl?: string;
-  onEdit: (entry: RamyeonEntry) => void;
-  onDelete: (entry: RamyeonEntry) => void | Promise<void>;
+  onEdit: (entry: SofullEntry) => void;
+  onDelete: (entry: SofullEntry) => void | Promise<void>;
   canEdit: boolean;
 }
 
@@ -77,3 +77,5 @@ const EntryCard = ({ entry, driveImageUrl, onEdit, onDelete, canEdit }: Props) =
 };
 
 export default EntryCard;
+
+

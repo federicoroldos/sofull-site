@@ -12,15 +12,15 @@ import {
   uploadToAppData
 } from './utils/googleDriveClient';
 import { sanitizeEntries } from './utils/sanitize';
-import type { RamyeonDataFile, RamyeonEntry, SpicinessLevel } from './types/ramyeon';
+import type { SofullDataFile, SofullEntry, SpicinessLevel } from './types/sofull';
 
-const DEFAULT_DATA: RamyeonDataFile = {
+const DEFAULT_DATA: SofullDataFile = {
   version: 1,
   updatedAt: new Date().toISOString(),
   entries: []
 };
 
-const demoEntries: RamyeonEntry[] = [
+const demoEntries: SofullEntry[] = [
   {
     id: 'demo-1',
     name: '신라면',
@@ -83,7 +83,7 @@ const ATTRIBUTE_SORT_BY_CATEGORY: Record<
   drink: { sortMode: 'most-sweet', label: 'Most sweet' },
   ice_cream: { sortMode: 'most-creamy', label: 'Most creamy' }
 };
-const createdAtToMs = (entry: RamyeonEntry) => {
+const createdAtToMs = (entry: SofullEntry) => {
   const timestamp = Date.parse(entry.createdAt);
   return Number.isFinite(timestamp) ? timestamp : 0;
 };
@@ -93,12 +93,12 @@ const isAttributeSort = (mode: SortMode) =>
   mode === 'most-sweet' ||
   mode === 'most-creamy';
 
-const parseDataFile = (payload: string): RamyeonDataFile => {
+const parseDataFile = (payload: string): SofullDataFile => {
   if (!payload || payload.trim().length === 0) {
     return { ...DEFAULT_DATA, updatedAt: nowIso() };
   }
   try {
-    const parsed = JSON.parse(payload) as RamyeonDataFile;
+    const parsed = JSON.parse(payload) as SofullDataFile;
     if (!parsed || !Array.isArray(parsed.entries)) {
       return { ...DEFAULT_DATA, updatedAt: nowIso() };
     }
@@ -112,7 +112,7 @@ const parseDataFile = (payload: string): RamyeonDataFile => {
   }
 };
 
-const createId = () => (crypto?.randomUUID ? crypto.randomUUID() : `ramyeon-${Date.now()}`);
+const createId = () => (crypto?.randomUUID ? crypto.randomUUID() : `sofull-${Date.now()}`);
 const normalizeFileNamePart = (value: string) => value.replace(/[\\/]+/g, '-').replace(/\s+/g, ' ').trim();
 const buildImageFileName = (name: string, nameEnglish: string, originalFileName: string) => {
   const koreanName = normalizeFileNamePart(name);
@@ -134,12 +134,12 @@ const App = () => {
     signIn,
     signOut
   } = useGoogleAuth();
-  const [entries, setEntries] = useState<RamyeonEntry[]>([]);
+  const [entries, setEntries] = useState<SofullEntry[]>([]);
   const [sortMode, setSortMode] = useState<SortMode>('latest');
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
   const [query, setQuery] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingEntry, setEditingEntry] = useState<RamyeonEntry | null>(null);
+  const [editingEntry, setEditingEntry] = useState<SofullEntry | null>(null);
   const [driveFileId, setDriveFileId] = useState('');
   const [syncState, setSyncState] = useState<'idle' | 'loading' | 'saving' | 'error'>('idle');
   const [syncMessage, setSyncMessage] = useState('');
@@ -216,7 +216,7 @@ const App = () => {
     return sorted;
   }, [entries, isLoggedIn, query, sortMode, categoryFilter, collatorEn, collatorKo]);
 
-  const resolveEntryImage = (entry: RamyeonEntry) => {
+  const resolveEntryImage = (entry: SofullEntry) => {
     if (entry.imageDriveFileId) {
       const driveSrc = driveImageUrls[entry.imageDriveFileId];
       if (driveSrc) return driveSrc;
@@ -229,7 +229,7 @@ const App = () => {
     setModalOpen(true);
   };
 
-  const openEdit = (entry: RamyeonEntry) => {
+  const openEdit = (entry: SofullEntry) => {
     setEditingEntry(entry);
     setModalOpen(true);
   };
@@ -239,13 +239,13 @@ const App = () => {
     setEditingEntry(null);
   };
 
-  const saveToDrive = async (nextEntries: RamyeonEntry[]) => {
+  const saveToDrive = async (nextEntries: SofullEntry[]) => {
     if (!accessToken || !driveFileId) return;
     setSyncState('saving');
     setSyncMessage('Saving to Google Drive...');
     try {
       const sanitizedEntries = sanitizeEntries(nextEntries);
-      const payload: RamyeonDataFile = {
+      const payload: SofullDataFile = {
         version: 1,
         updatedAt: nowIso(),
         entries: sanitizedEntries
@@ -328,7 +328,7 @@ const App = () => {
     };
 
     if (editingEntry) {
-      const updatedEntry: RamyeonEntry = {
+      const updatedEntry: SofullEntry = {
         ...editingEntry,
         ...entryPayload,
         updatedAt: nowIso()
@@ -339,7 +339,7 @@ const App = () => {
       setEntries(nextEntries);
       await saveToDrive(nextEntries);
     } else {
-      const newEntry: RamyeonEntry = {
+      const newEntry: SofullEntry = {
         id: createId(),
         createdAt: nowIso(),
         updatedAt: nowIso(),
@@ -353,7 +353,7 @@ const App = () => {
     closeModal();
   };
 
-  const handleDelete = (entry: RamyeonEntry) => {
+  const handleDelete = (entry: SofullEntry) => {
     if (!window.confirm(`Delete ${entry.name}?`)) return;
     const nextEntries = entries.filter((item) => item.id !== entry.id);
     setEntries(nextEntries);
@@ -660,3 +660,5 @@ const App = () => {
 };
 
 export default App;
+
+

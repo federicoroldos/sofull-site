@@ -3,7 +3,7 @@ export type IceCreamFormFactor = 'bar' | 'cream';
 export type SpicinessLevel = 'not-spicy' | 'mild' | 'medium' | 'hot' | 'extreme';
 export type EntryCategory = 'ramyeon' | 'snack' | 'drink' | 'ice_cream';
 
-export interface RamyeonEntry {
+export interface SofullEntry {
   id: string;
   name: string;
   nameEnglish?: string;
@@ -22,8 +22,8 @@ export interface RamyeonEntry {
   updatedAt: string;
 }
 
-export interface RamyeonDataFile {
+export interface SofullDataFile {
   version: number;
   updatedAt: string;
-  entries: RamyeonEntry[];
+  entries: SofullEntry[];
 }

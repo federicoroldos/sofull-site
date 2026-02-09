@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+﻿import { useCallback, useEffect, useState } from 'react';
 import { firebaseApp } from '../firebase';
 import {
   browserLocalPersistence,
@@ -16,9 +16,11 @@ provider.addScope('https://www.googleapis.com/auth/drive.appdata');
 provider.addScope('https://www.googleapis.com/auth/drive.file');
 provider.setCustomParameters({ prompt: 'select_account consent' });
 
-const ACCESS_TOKEN_KEY = 'ramyeon-google-access-token';
+const ACCESS_TOKEN_KEY = 'sofull-google-access-token';
+const LEGACY_ACCESS_TOKEN_KEY = 'ramyeon-google-access-token';
 const ACCESS_TOKEN_TTL_MS = 50 * 60 * 1000;
-const SESSION_START_KEY = 'ramyeon-google-session-start';
+const SESSION_START_KEY = 'sofull-google-session-start';
+const LEGACY_SESSION_START_KEY = 'ramyeon-google-session-start';
 const DEFAULT_SESSION_DURATION_DAYS = 180;
 const SESSION_DURATION_DAYS = (() => {
   const raw = Number(import.meta.env.VITE_SESSION_DURATION_DAYS);
@@ -28,41 +30,80 @@ const SESSION_DURATION_DAYS = (() => {
 const SESSION_DURATION_MS = SESSION_DURATION_DAYS * 24 * 60 * 60 * 1000;
 const AUTH_EMAIL_ENDPOINT = import.meta.env.VITE_AUTH_EMAIL_ENDPOINT;
 
-const readStoredToken = () => {
+const parseStoredToken = (raw: string | null) => {
+  if (!raw) return null;
   try {
-    const raw = localStorage.getItem(ACCESS_TOKEN_KEY);
-    if (!raw) return { token: null, expiresAt: null };
     const parsed = JSON.parse(raw) as { token: string; storedAt: number };
-    if (!parsed?.token || typeof parsed.storedAt !== 'number') {
-      return { token: null, expiresAt: null };
-    }
-    const expiresAt = parsed.storedAt + ACCESS_TOKEN_TTL_MS;
-    if (Date.now() > expiresAt) return { token: null, expiresAt: null };
-    return { token: parsed.token, expiresAt };
-  } catch {
-    return { token: null, expiresAt: null };
-  }
-};
-
-const readSessionStart = () => {
-  try {
-    const raw = localStorage.getItem(SESSION_START_KEY);
-    if (!raw) return null;
-    const parsed = Number(raw);
-    if (!Number.isFinite(parsed) || parsed <= 0) return null;
-    return parsed;
+    if (!parsed?.token || typeof parsed.storedAt !== 'number') return null;
+    return { token: parsed.token, storedAt: parsed.storedAt };
   } catch {
     return null;
   }
+};
+
+const readTokenEntryFromKey = (key: string) => parseStoredToken(localStorage.getItem(key));
+
+const persistTokenEntry = (entry: { token: string; storedAt: number } | null) => {
+  try {
+    if (!entry) {
+      localStorage.removeItem(ACCESS_TOKEN_KEY);
+      localStorage.removeItem(LEGACY_ACCESS_TOKEN_KEY);
+      return;
+    }
+    localStorage.setItem(ACCESS_TOKEN_KEY, JSON.stringify(entry));
+    localStorage.removeItem(LEGACY_ACCESS_TOKEN_KEY);
+  } catch {
+    // Ignore storage write failures.
+  }
+};
+
+const toTokenState = (entry: { token: string; storedAt: number }) => {
+  const expiresAt = entry.storedAt + ACCESS_TOKEN_TTL_MS;
+  if (Date.now() > expiresAt) return { token: null, expiresAt: null };
+  return { token: entry.token, expiresAt };
+};
+
+const readStoredToken = () => {
+  const primary = readTokenEntryFromKey(ACCESS_TOKEN_KEY);
+  if (primary) return toTokenState(primary);
+  const legacy = readTokenEntryFromKey(LEGACY_ACCESS_TOKEN_KEY);
+  if (legacy) {
+    const state = toTokenState(legacy);
+    if (state.token) {
+      persistTokenEntry(legacy);
+    }
+    return state;
+  }
+  return { token: null, expiresAt: null };
+};
+
+const parseSessionStart = (raw: string | null) => {
+  if (!raw) return null;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed;
+};
+
+const readSessionStart = () => {
+  const primary = parseSessionStart(localStorage.getItem(SESSION_START_KEY));
+  if (primary) return primary;
+  const legacy = parseSessionStart(localStorage.getItem(LEGACY_SESSION_START_KEY));
+  if (legacy) {
+    persistSessionStart(legacy);
+    return legacy;
+  }
+  return null;
 };
 
 const persistSessionStart = (timestamp: number | null) => {
   try {
     if (!timestamp) {
       localStorage.removeItem(SESSION_START_KEY);
+      localStorage.removeItem(LEGACY_SESSION_START_KEY);
       return;
     }
     localStorage.setItem(SESSION_START_KEY, String(timestamp));
+    localStorage.removeItem(LEGACY_SESSION_START_KEY);
   } catch {
     // Ignore storage write failures.
   }
@@ -74,13 +115,10 @@ const isSessionExpired = (sessionStartMs: number, now: number) =>
 const persistToken = (token: string | null) => {
   try {
     if (!token) {
-      localStorage.removeItem(ACCESS_TOKEN_KEY);
+      persistTokenEntry(null);
       return;
     }
-    localStorage.setItem(
-      ACCESS_TOKEN_KEY,
-      JSON.stringify({ token, storedAt: Date.now() })
-    );
+    persistTokenEntry({ token, storedAt: Date.now() });
   } catch {
     // Ignore storage write failures.
   }
@@ -115,10 +153,10 @@ export const useGoogleAuth = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const updateSessionStart = (value: number | null) => {
+  const updateSessionStart = useCallback((value: number | null) => {
     setSessionStartMs(value);
     persistSessionStart(value);
-  };
+  }, []);
 
   const expireToken = () => {
     setAccessToken(null);
@@ -127,7 +165,7 @@ export const useGoogleAuth = () => {
     setTokenExpired(true);
   };
 
-  const forceSessionLogout = async (reason?: string) => {
+  const forceSessionLogout = useCallback(async (reason?: string) => {
     setLoading(true);
     try {
       await signOut(auth);
@@ -143,7 +181,7 @@ export const useGoogleAuth = () => {
       setLoading(false);
       setError(reason || null);
     }
-  };
+  }, [auth, updateSessionStart]);
 
   useEffect(() => {
     let active = true;
@@ -176,7 +214,7 @@ export const useGoogleAuth = () => {
       active = false;
       unsub();
     };
-  }, [auth]);
+  }, [auth, forceSessionLogout, updateSessionStart]);
 
   useEffect(() => {
     if (!user || !sessionStartMs) return;
@@ -188,7 +226,7 @@ export const useGoogleAuth = () => {
     checkSessionExpiry();
     const interval = window.setInterval(checkSessionExpiry, 60 * 60 * 1000);
     return () => window.clearInterval(interval);
-  }, [user, sessionStartMs]);
+  }, [user, sessionStartMs, forceSessionLogout]);
 
   useEffect(() => {
     if (!accessToken || !accessTokenExpiresAt) return;
@@ -204,17 +242,18 @@ export const useGoogleAuth = () => {
 
   useEffect(() => {
     const checkStoredExpiry = () => {
-      try {
-        const raw = localStorage.getItem(ACCESS_TOKEN_KEY);
-        if (!raw) return;
-        const parsed = JSON.parse(raw) as { token: string; storedAt: number };
-        if (!parsed?.token || typeof parsed.storedAt !== 'number') return;
-        const expiresAt = parsed.storedAt + ACCESS_TOKEN_TTL_MS;
-        if (Date.now() >= expiresAt) {
-          expireToken();
-        }
-      } catch {
-        // Ignore malformed local storage values.
+      const primary = readTokenEntryFromKey(ACCESS_TOKEN_KEY);
+      const legacy = primary ? null : readTokenEntryFromKey(LEGACY_ACCESS_TOKEN_KEY);
+      const entry = primary || legacy;
+      if (!entry) return;
+      const expiresAt = entry.storedAt + ACCESS_TOKEN_TTL_MS;
+      if (Date.now() >= expiresAt) {
+        expireToken();
+        persistTokenEntry(null);
+        return;
+      }
+      if (legacy) {
+        persistTokenEntry(legacy);
       }
     };
     checkStoredExpiry();
@@ -222,7 +261,7 @@ export const useGoogleAuth = () => {
       checkStoredExpiry();
     }, 15 * 1000);
     const onStorage = (event: StorageEvent) => {
-      if (event.key === ACCESS_TOKEN_KEY) {
+      if (event.key === ACCESS_TOKEN_KEY || event.key === LEGACY_ACCESS_TOKEN_KEY) {
         checkStoredExpiry();
       }
     };
@@ -289,3 +328,9 @@ export const useGoogleAuth = () => {
     signOut: signOutUser
   };
 };
+
+
+
+
+
+
