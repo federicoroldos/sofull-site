@@ -30,26 +30,6 @@ const SESSION_DURATION_DAYS = (() => {
 const SESSION_DURATION_MS = SESSION_DURATION_DAYS * 24 * 60 * 60 * 1000;
 const AUTH_EMAIL_ENDPOINT = import.meta.env.VITE_AUTH_EMAIL_ENDPOINT;
 
-const resolveAuthEmailEndpoint = () => {
-  if (!AUTH_EMAIL_ENDPOINT) return '';
-  try {
-    const raw = String(AUTH_EMAIL_ENDPOINT).trim();
-    const url = new URL(raw, window.location.origin);
-    const isAbsolute = /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(raw);
-    if (!isAbsolute) return url.toString();
-    const currentHost = window.location.hostname;
-    const endpointHost = url.hostname;
-    const isLocal = /^(localhost|127\.0\.0\.1|0\.0\.0\.0)$/i.test(currentHost);
-    const endpointIsVercel = endpointHost.endsWith('.vercel.app');
-    if (!isLocal && endpointIsVercel && currentHost !== endpointHost) {
-      return new URL(`${url.pathname}${url.search}${url.hash}`, window.location.origin).toString();
-    }
-    return url.toString();
-  } catch {
-    return AUTH_EMAIL_ENDPOINT;
-  }
-};
-
 const parseStoredToken = (raw: string | null) => {
   if (!raw) return null;
   try {
@@ -145,8 +125,7 @@ const persistToken = (token: string | null) => {
 };
 
 const notifyAuthEmail = async (user: User) => {
-  const endpoint = resolveAuthEmailEndpoint();
-  if (!endpoint) return;
+  if (!AUTH_EMAIL_ENDPOINT) return;
   try {
     const idToken = await user.getIdToken();
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -154,7 +133,7 @@ const notifyAuthEmail = async (user: User) => {
     const headers: Record<string, string> = { Authorization: `Bearer ${idToken}` };
     if (timezone) headers['X-Client-Timezone'] = timezone;
     if (locale) headers['X-Client-Locale'] = locale;
-    await fetch(endpoint, {
+    await fetch(AUTH_EMAIL_ENDPOINT, {
       method: 'POST',
       headers
     });
