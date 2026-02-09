@@ -144,8 +144,10 @@ const buildMetaRows = ({ timeLabel, timeValue, device, browser, city, country })
   if (timeValue) rows.push({ label: timeLabel, value: timeValue });
   if (device) rows.push({ label: 'Device', value: device });
   if (browser) rows.push({ label: 'Browser', value: browser });
-  if (city) rows.push({ label: 'City', value: city });
-  if (country) rows.push({ label: 'Country', value: country });
+  const locationParts = [city, country].filter(Boolean);
+  if (locationParts.length) {
+    rows.push({ label: 'Location', value: locationParts.join(', ') });
+  }
   return rows;
 };
 
