@@ -29,5 +29,20 @@ docs
 *.key
 *.p12
 *.crt
+*.jks
+*.keystore
+keystore.properties
 firebase-adminsdk*.json
 service-account*.json
+
+# Capacitor / Android
+android/.gradle
+android/.idea
+android/.project
+android/.settings
+android/.classpath
+android/.DS_Store
+android/build
+android/app/build
+android/app/google-services.json
+android/local.properties
