@@ -1,4 +1,4 @@
-import type { EntryCategory, SpicinessLevel } from '../types/ramyeon';
+﻿import type { EntryCategory, SpicinessLevel } from '../types/sofull';
 import { getAttributeIcon, getAttributeLabel, getAttributeLevelLabel, getAttributeValue } from '../utils/attribute';
 
 interface Props {
@@ -23,3 +23,4 @@ const AttributeMeter = ({ level, category }: Props) => {
 };
 
 export default AttributeMeter;
+

@@ -1,27 +1,14 @@
 ﻿const UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files';
 const DOWNLOAD_URL = 'https://www.googleapis.com/drive/v3/files';
 const FILES_URL = 'https://www.googleapis.com/drive/v3/files';
-const BACKUP_FILENAME = 'ramyeon-dictionary.json';
-const APP_DATA_QUERY = `name = '${BACKUP_FILENAME}' and trashed = false and 'appDataFolder' in parents`;
+const BACKUP_FILENAME = 'sofull.json';
+const LEGACY_BACKUP_FILENAME = 'ramyeon-dictionary.json';
 
-export const ensureAppDataFile = async (token: string, name = BACKUP_FILENAME) => {
-  const listUrl = `${FILES_URL}?q=${encodeURIComponent(APP_DATA_QUERY)}&spaces=appDataFolder&fields=files(id,name)`;
-  const listResponse = await fetch(listUrl, {
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
-  });
+const escapeQueryValue = (value: string) => value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+const buildAppDataQuery = (name: string) =>
+  `name = '${escapeQueryValue(name)}' and trashed = false and 'appDataFolder' in parents`;
 
-  if (!listResponse.ok) {
-    const errorText = await listResponse.text();
-    throw new Error(`Error listing appData files: ${errorText || listResponse.statusText}`);
-  }
-
-  const listData = (await listResponse.json()) as { files?: Array<{ id: string }> };
-  if (listData.files && listData.files.length > 0) {
-    return listData.files[0].id;
-  }
-
+const createAppDataFile = async (token: string, name: string) => {
   const createResponse = await fetch(FILES_URL, {
     method: 'POST',
     headers: {
@@ -47,7 +34,48 @@ export const ensureAppDataFile = async (token: string, name = BACKUP_FILENAME) =
   return data.id;
 };
 
-export const uploadToAppData = async (token: string, fileId: string, content: string) => {
+const listAppDataFileId = async (token: string, name: string) => {
+  const query = buildAppDataQuery(name);
+  const listUrl = `${FILES_URL}?q=${encodeURIComponent(query)}&spaces=appDataFolder&fields=files(id,name)`;
+  const listResponse = await fetch(listUrl, {
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  if (!listResponse.ok) {
+    const errorText = await listResponse.text();
+    throw new Error(`Error listing appData files: ${errorText || listResponse.statusText}`);
+  }
+
+  const listData = (await listResponse.json()) as { files?: Array<{ id: string }> };
+  return listData.files?.[0]?.id ?? null;
+};
+
+const migrateLegacyAppDataFile = async (token: string, legacyId: string) => {
+  const content = await downloadFromAppData(token, legacyId);
+  const newId = await createAppDataFile(token, BACKUP_FILENAME);
+  await uploadToAppData(token, newId, content || '');
+  return newId;
+};
+
+export const ensureAppDataFile = async (token: string, name = BACKUP_FILENAME) => {
+  const primaryId = await listAppDataFileId(token, name);
+  if (primaryId) return primaryId;
+  if (name === BACKUP_FILENAME) {
+    const legacyId = await listAppDataFileId(token, LEGACY_BACKUP_FILENAME);
+    if (legacyId) {
+      try {
+        return await migrateLegacyAppDataFile(token, legacyId);
+      } catch {
+        return legacyId;
+      }
+    }
+  }
+  return createAppDataFile(token, name);
+};
+
+export async function uploadToAppData(token: string, fileId: string, content: string) {
   const url = `${UPLOAD_URL}/${fileId}?uploadType=media`;
   const response = await fetch(url, {
     method: 'PATCH',
@@ -62,9 +90,9 @@ export const uploadToAppData = async (token: string, fileId: string, content: st
     const errorText = await response.text();
     throw new Error(`Error uploading to Drive: ${errorText || response.statusText}`);
   }
-};
+}
 
-export const downloadFromAppData = async (token: string, fileId: string) => {
+export async function downloadFromAppData(token: string, fileId: string) {
   const url = `${DOWNLOAD_URL}/${fileId}?alt=media`;
   const response = await fetch(url, {
     method: 'GET',
@@ -79,9 +107,7 @@ export const downloadFromAppData = async (token: string, fileId: string) => {
   }
 
   return response.text();
-};
-
-const escapeQueryValue = (value: string) => value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
 
 interface DriveFileMetadata {
   id: string;
@@ -145,7 +171,7 @@ export const uploadFileMultipart = async (
   folderId: string,
   nameOverride?: string
 ): Promise<DriveFileMetadata> => {
-  const boundary = `ramyeon-${crypto.randomUUID?.() || Date.now()}`;
+  const boundary = `sofull-${crypto.randomUUID?.() || Date.now()}`;
   const metadata = {
     name: nameOverride?.trim() || file.name,
     mimeType: file.type || 'application/octet-stream',

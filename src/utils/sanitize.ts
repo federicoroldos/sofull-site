@@ -1,6 +1,6 @@
-﻿import type { EntryCategory, FormFactor, RamyeonEntry, SpicinessLevel } from '../types/ramyeon';
+﻿import type { EntryCategory, FormFactor, SofullEntry, SpicinessLevel } from '../types/sofull';
 
-import type { IceCreamFormFactor } from '../types/ramyeon';
+import type { IceCreamFormFactor } from '../types/sofull';
 
 const MAX_NAME = 80;
 const MAX_BRAND = 60;
@@ -40,7 +40,7 @@ const buildLegacyId = (entry: Record<string, unknown>, createdAt: string) => {
   for (let i = 0; i < fingerprint.length; i += 1) {
     hash = (hash * 31 + fingerprint.charCodeAt(i)) | 0;
   }
-  return `ramyeon-legacy-${Math.abs(hash).toString(36)}`;
+  return `sofull-legacy-${Math.abs(hash).toString(36)}`;
 };
 
 const normalizeIsoDate = (value: unknown): string => {
@@ -136,9 +136,9 @@ export const sanitizeUrl = (value: unknown) => {
   }
 };
 
-export const sanitizeEntry = (value: unknown): RamyeonEntry | null => {
+export const sanitizeEntry = (value: unknown): SofullEntry | null => {
   if (!value || typeof value !== 'object') return null;
-  const entry = value as Partial<RamyeonEntry> & Record<string, unknown>;
+  const entry = value as Partial<SofullEntry> & Record<string, unknown>;
   const derivedCreatedAt =
     normalizeIsoDate(entry.createdAt) ||
     normalizeIsoDate(entry.created_at) ||
@@ -173,9 +173,11 @@ export const sanitizeEntry = (value: unknown): RamyeonEntry | null => {
 };
 
 export const sanitizeEntries = (entries: unknown) => {
-  if (!Array.isArray(entries)) return [] as RamyeonEntry[];
+  if (!Array.isArray(entries)) return [] as SofullEntry[];
   const sanitized = entries
     .map((entry) => sanitizeEntry(entry))
-    .filter((entry): entry is RamyeonEntry => Boolean(entry));
+    .filter((entry): entry is SofullEntry => Boolean(entry));
   return sanitized;
 };
+
+

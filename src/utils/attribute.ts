@@ -1,5 +1,5 @@
-import { createElement } from 'react';
-import type { EntryCategory, SpicinessLevel } from '../types/ramyeon';
+﻿import { createElement } from 'react';
+import type { EntryCategory, SpicinessLevel } from '../types/sofull';
 
 const ATTRIBUTE_LABELS: Record<EntryCategory, string> = {
   ramyeon: 'Spiciness',
@@ -75,3 +75,4 @@ export const getAttributeIcon = (category?: EntryCategory) => {
       className: ['spice__pepper', iconClass, isOn ? 'spice__pepper--on' : ''].filter(Boolean).join(' ')
     });
 };
+

@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import IconRating from './IconRating';
 import RatingStars from './RatingStars';
 import { ATTRIBUTE_LEVELS, getAttributeIcon, getAttributeLabel, getAttributeLevelLabel, getAttributeValue } from '../utils/attribute';
 import { sanitizeUrl } from '../utils/sanitize';
-import type { EntryCategory, FormFactor, IceCreamFormFactor, RamyeonEntry, SpicinessLevel } from '../types/ramyeon';
+import type { EntryCategory, FormFactor, IceCreamFormFactor, SofullEntry, SpicinessLevel } from '../types/sofull';
 
 interface Props {
   isOpen: boolean;
-  initial?: RamyeonEntry | null;
+  initial?: SofullEntry | null;
   initialImageSrc?: string;
   onClose: () => void;
   onSave: (values: EntryFormSubmitValues) => Promise<void>;
@@ -50,25 +50,25 @@ const CATEGORY_PLACEHOLDERS: Record<
   { name: string; nameEnglish: string; brand: string; description: string }
 > = {
   ramyeon: {
-    name: '신라면',
+    name: 'ì‹ ë¼ë©´',
     nameEnglish: 'Shin Ramyeon',
     brand: 'Nongshim',
     description: 'Spicy, savory, chewy noodles.'
   },
   snack: {
-    name: '초코파이',
+    name: 'ì´ˆì½”íŒŒì´',
     nameEnglish: 'Choco Pie',
     brand: 'Orion',
     description: 'Sweet, soft, chocolate-coated treat.'
   },
   drink: {
-    name: '바나나우유',
+    name: 'ë°”ë‚˜ë‚˜ìš°ìœ ',
     nameEnglish: 'Banana Milk',
     brand: 'Binggrae',
     description: 'Sweet, creamy, banana-flavored milk.'
   },
   ice_cream: {
-    name: '메로나',
+    name: 'ë©”ë¡œë‚˜',
     nameEnglish: 'Melona',
     brand: 'Binggrae',
     description: 'Melon-flavored, creamy ice bar.'
@@ -441,4 +441,6 @@ const EntryFormModal = ({ isOpen, initial, initialImageSrc, onClose, onSave }: P
 };
 
 export default EntryFormModal;
+
+
 
