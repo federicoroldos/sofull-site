@@ -26,7 +26,7 @@ When signed out, the app shows a demo entry to preview the layout.
 - Each subsequent login sends one login notification email.
 - Sign-up does not also send a login email.
 - Emails are branded to match the site and include privacy/terms links.
-- Login emails include sign-in time, device/browser, and IP/location when available, plus a Google security callout.
+- Login emails include sign-in time, device/browser, and approximate city/country when available, plus a Google security callout.
 
 Environment variables for email delivery:
 - `BREVO_API_KEY`, `BREVO_SENDER_EMAIL`, `BREVO_SENDER_NAME`
