@@ -43,6 +43,19 @@ Environment variables for email delivery:
 - `CAPTCHA_SECRET_KEY` (optional; enables CAPTCHA verification)
 - `CAPTCHA_PROVIDER` (`hcaptcha` or `recaptcha`), `CAPTCHA_VERIFY_URL` (optional override), `CAPTCHA_MIN_SCORE` (optional)
 
+## Deployment (GitHub Pages + Vercel API)
+
+The app is static and can be hosted on GitHub Pages, while the email API
+(`api/auth-email`) must be hosted on a serverless provider (Vercel).
+
+Frontend (GitHub Pages):
+- Build in GitHub Actions with `VITE_AUTH_EMAIL_ENDPOINT` pointing to the Vercel API URL.
+- Example: `VITE_AUTH_EMAIL_ENDPOINT=https://sofull-site.vercel.app/api/auth-email`
+
+Email API (Vercel):
+- Set `CORS_ORIGINS=https://sofull.site` (and optionally the Vercel domain).
+- Keep all email secrets in Vercel Environment Variables only.
+
 Security notes:
 - Server-side secrets (Brevo + Firebase Admin) must live only in Vercel Environment Variables.
 - Prefer Vercel "Sensitive" environment variables for secrets so values are write-only after creation.
