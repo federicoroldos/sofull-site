@@ -19,6 +19,7 @@ in Google Drive `appDataFolder`. The file is created on first login and updated 
 If you upload an image, it is stored in your Google Drive in a `배불러! (So Full!)/images` folder
 and referenced by its Drive file ID. If you use an image URL, it must be `https://`.
 When signed out, the app shows a demo entry to preview the layout.
+Logins persist on the same device/browser profile for up to 6 months by default.
 
 ## Email Notifications
 
@@ -80,8 +81,11 @@ npm run dev
    - `VITE_FIREBASE_AUTH_DOMAIN`
    - `VITE_FIREBASE_PROJECT_ID`
    - `VITE_FIREBASE_APP_ID`
+6. Optional session duration:
+   - `VITE_SESSION_DURATION_DAYS` (defaults to `180`)
 
 ## Notes
 
 - If you refresh and Drive actions stop working, sign out and sign back in to refresh the access token.
 - For security, image URLs must use `https://` (non-HTTPS URLs are rejected).
+- Persistent login is device/browser-specific; a new device or profile will require a fresh sign-in.
