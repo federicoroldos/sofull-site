@@ -124,39 +124,28 @@ const getRequestMeta = (req) => {
   const userAgent = getHeader(req, 'user-agent');
   const { browser, device } = parseUserAgent(userAgent);
 
-  const forwardedFor = getHeader(req, 'x-forwarded-for');
-  const ip = forwardedFor
-    ? forwardedFor.split(',')[0].trim()
-    : getHeader(req, 'x-real-ip') || getHeader(req, 'cf-connecting-ip');
-
   const city = getHeader(req, 'x-vercel-ip-city') || getHeader(req, 'x-appengine-city');
-  const region =
-    getHeader(req, 'x-vercel-ip-region') ||
-    getHeader(req, 'x-appengine-region') ||
-    getHeader(req, 'x-vercel-ip-country-region');
   const country =
     getHeader(req, 'x-vercel-ip-country') ||
     getHeader(req, 'cf-ipcountry') ||
     getHeader(req, 'x-appengine-country');
 
-  const location = [city, region, country].filter(Boolean).join(', ') || null;
-
   return {
     userAgent,
     browser,
     device,
-    ip: ip || null,
-    location
+    city: city || null,
+    country: country || null
   };
 };
 
-const buildMetaRows = ({ timeLabel, timeValue, device, browser, ip, location }) => {
+const buildMetaRows = ({ timeLabel, timeValue, device, browser, city, country }) => {
   const rows = [];
   if (timeValue) rows.push({ label: timeLabel, value: timeValue });
   if (device) rows.push({ label: 'Device', value: device });
   if (browser) rows.push({ label: 'Browser', value: browser });
-  if (ip) rows.push({ label: 'IP address', value: ip });
-  if (location) rows.push({ label: 'Location', value: location });
+  if (city) rows.push({ label: 'City', value: city });
+  if (country) rows.push({ label: 'Country', value: country });
   return rows;
 };
 
@@ -783,8 +772,8 @@ export default async function handler(req, res) {
     timeValue: loginTimestamp,
     device: requestMeta.device,
     browser: requestMeta.browser,
-    ip: requestMeta.ip,
-    location: requestMeta.location
+    city: requestMeta.city,
+    country: requestMeta.country
   });
 
   let sentWelcome = false;
