@@ -20,6 +20,21 @@ If you upload an image, it is stored in your Google Drive in a `배불러! (So F
 and referenced by its Drive file ID. If you use an image URL, it must be `https://`.
 When signed out, the app shows a demo entry to preview the layout.
 
+## Email Notifications
+
+- On first sign-up, a single signup confirmation email is sent.
+- Each subsequent login sends one login notification email.
+- Sign-up does not also send a login email.
+- Emails are branded to match the site and include privacy/terms links.
+- Login emails include sign-in time, device/browser, and IP/location when available, plus a Google security callout.
+
+Environment variables for email delivery:
+- `BREVO_API_KEY`, `BREVO_SENDER_EMAIL`, `BREVO_SENDER_NAME`
+- `PUBLIC_SITE_URL` (used for links/logos in email templates)
+- `SUPPORT_EMAIL` (used in email footer)
+- `EMAIL_LOGO_URL` (optional override for the header logo image; use a PNG/JPG/GIF for best email client support)
+- `LOGIN_EMAIL_COOLDOWN_SECONDS` (optional throttling)
+
 ## Idea Evolution
 
 This started as a tiny ramyeon-only list to remember favorite packs and cups. Once it was useful

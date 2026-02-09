@@ -18,6 +18,7 @@ provider.setCustomParameters({ prompt: 'select_account consent' });
 
 const ACCESS_TOKEN_KEY = 'ramyeon-google-access-token';
 const ACCESS_TOKEN_TTL_MS = 50 * 60 * 1000;
+const AUTH_EMAIL_ENDPOINT = import.meta.env.VITE_AUTH_EMAIL_ENDPOINT;
 
 const readStoredToken = () => {
   try {
@@ -47,6 +48,24 @@ const persistToken = (token: string | null) => {
     );
   } catch {
     // Ignore storage write failures.
+  }
+};
+
+const notifyAuthEmail = async (user: User) => {
+  if (!AUTH_EMAIL_ENDPOINT) return;
+  try {
+    const idToken = await user.getIdToken();
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const locale = navigator.language;
+    const headers: Record<string, string> = { Authorization: `Bearer ${idToken}` };
+    if (timezone) headers['X-Client-Timezone'] = timezone;
+    if (locale) headers['X-Client-Locale'] = locale;
+    await fetch(AUTH_EMAIL_ENDPOINT, {
+      method: 'POST',
+      headers
+    });
+  } catch (err) {
+    console.warn('Auth email notification failed.', err);
   }
 };
 
@@ -144,6 +163,7 @@ export const useGoogleAuth = () => {
         setAccessTokenExpiresAt(null);
         persistToken(null);
       }
+      void notifyAuthEmail(result.user);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Google sign-in failed.';
       setError(message);
