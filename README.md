@@ -100,6 +100,17 @@ cp .env.example .env
 npm run dev
 ```
 
+## Android
+
+See `ANDROID_SETUP.md` for full instructions (Firebase setup, SHA-1, emulator/device, APK/AAB).
+
+Quick commands:
+- `npm install`
+- `npm run android:build`
+- `npm run android:open`
+- `npm run android:apk`
+- `npm run android:aab`
+
 ## Google OAuth + Drive Configuration
 
 1. Create a Firebase project.

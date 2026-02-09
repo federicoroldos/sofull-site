@@ -19,7 +19,13 @@ const COLORS = {
 const DEFAULT_SUPPORT_EMAIL = 'federicoroldos1@gmail.com';
 const DEFAULT_APP_URL = 'https://sofull.site';
 const GOOGLE_SECURITY_URL = 'https://myaccount.google.com/security';
-const DEFAULT_ALLOWED_ORIGINS = [DEFAULT_APP_URL];
+const DEFAULT_NATIVE_ORIGINS = [
+  'capacitor://localhost',
+  'ionic://localhost',
+  'http://localhost',
+  'https://localhost'
+];
+const DEFAULT_ALLOWED_ORIGINS = [DEFAULT_APP_URL, ...DEFAULT_NATIVE_ORIGINS];
 const DEFAULT_DEV_ORIGINS = ['http://localhost:5173', 'http://localhost:3000'];
 
 const REDACTED_VALUE = '[REDACTED]';
@@ -112,6 +118,7 @@ const normalizeBaseUrl = (value) => {
   if (!value) return null;
   const trimmed = String(value).trim().replace(/\/+$/, '');
   if (!trimmed) return null;
+  if (/^(capacitor|ionic):\/\//i.test(trimmed)) return trimmed;
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
   if (/^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/i.test(trimmed)) {
     return `http://${trimmed}`;
@@ -155,6 +162,9 @@ const resolveAllowedOrigins = () => {
     .filter(Boolean)
     .forEach((origin) => allowed.add(origin));
 
+  allowed.add(DEFAULT_APP_URL);
+  DEFAULT_NATIVE_ORIGINS.forEach((origin) => allowed.add(origin));
+
   if (allowed.size === 0) {
     DEFAULT_ALLOWED_ORIGINS.forEach((origin) => allowed.add(origin));
   }
@@ -195,6 +205,20 @@ const getClientIp = (req) => {
     return forwarded.split(',')[0].trim();
   }
   return req.socket?.remoteAddress || '';
+};
+
+const maskIp = (value) => {
+  if (!value) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  if (trimmed.includes(':')) {
+    const parts = trimmed.split(':').filter(Boolean);
+    if (parts.length <= 2) return trimmed;
+    return `${parts.slice(0, 3).join(':')}:…`;
+  }
+  const parts = trimmed.split('.');
+  if (parts.length !== 4) return trimmed;
+  return `${parts[0]}.${parts[1]}.${parts[2]}.xxx`;
 };
 
 const hasBody = (req) => {
@@ -331,7 +355,7 @@ const getRequestMeta = (req) => {
   };
 };
 
-const buildMetaRows = ({ timeLabel, timeValue, device, browser, city, country }) => {
+const buildMetaRows = ({ timeLabel, timeValue, device, browser, city, country, ip }) => {
   const rows = [];
   if (timeValue) rows.push({ label: timeLabel, value: timeValue });
   if (device) rows.push({ label: 'Device', value: device });
@@ -340,6 +364,7 @@ const buildMetaRows = ({ timeLabel, timeValue, device, browser, city, country })
   if (locationParts.length) {
     rows.push({ label: 'Location', value: locationParts.join(', ') });
   }
+  if (ip) rows.push({ label: 'IP (masked)', value: ip });
   return rows;
 };
 
@@ -1066,8 +1091,17 @@ export default async function handler(req, res) {
     return;
   }
 
-  const displayName = decoded.name || email.split('@')[0] || 'there';
   const now = Date.now();
+  const userRateLimit = checkRateLimit(`user:${decoded.uid}`, rateLimitConfig, now);
+  if (!userRateLimit.allowed) {
+    const retryAfter = Math.max(1, Math.ceil((userRateLimit.resetAt - now) / 1000));
+    res.setHeader('Retry-After', String(retryAfter));
+    logger.warn('User rate limit exceeded.', { uid: decoded.uid, retryAfter });
+    sendError(res, 429, 'Too many requests. Please try again later.');
+    return;
+  }
+
+  const displayName = decoded.name || email.split('@')[0] || 'there';
   const cooldownSeconds = Number(process.env.LOGIN_EMAIL_COOLDOWN_SECONDS || '0');
   const loginCooldownMs = Number.isFinite(cooldownSeconds) ? cooldownSeconds * 1000 : 0;
   const authTimeSeconds = toFiniteNumber(decoded.auth_time);
@@ -1103,13 +1137,15 @@ export default async function handler(req, res) {
     const loginTimestamp = formatTimestamp(authTimeMs || now, locale, timeZone);
 
     const requestMeta = getRequestMeta(req);
+    const maskedIp = maskIp(clientIp);
     const metaRows = buildMetaRows({
       timeLabel: `Time (${timeZoneLabel})`,
       timeValue: loginTimestamp,
       device: requestMeta.device,
       browser: requestMeta.browser,
       city: requestMeta.city,
-      country: requestMeta.country
+      country: requestMeta.country,
+      ip: maskedIp
     });
 
     let sentWelcome = false;
