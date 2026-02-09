@@ -31,10 +31,31 @@ Logins persist on the same device/browser profile for up to 6 months by default.
 
 Environment variables for email delivery:
 - `BREVO_API_KEY`, `BREVO_SENDER_EMAIL`, `BREVO_SENDER_NAME`
+- `FIREBASE_SERVICE_ACCOUNT_JSON` (Firebase Admin service account JSON string)
 - `PUBLIC_SITE_URL` (used for links/logos in email templates)
 - `SUPPORT_EMAIL` (used in email footer)
 - `EMAIL_LOGO_URL` (optional override for the header logo image; use a PNG/JPG/GIF for best email client support)
 - `LOGIN_EMAIL_COOLDOWN_SECONDS` (optional throttling)
+- `CORS_ORIGINS` (comma-separated allowlist for the email API, ex: `https://sofull.site`)
+- `DEV_CORS_ORIGINS` (optional dev allowlist, ex: `http://localhost:5173`)
+- `ALLOW_LOCALHOST_ORIGIN` (set to `true` to include common localhost origins)
+- `AUTH_EMAIL_RATE_LIMIT_MAX`, `AUTH_EMAIL_RATE_LIMIT_WINDOW_SECONDS`
+- `CAPTCHA_SECRET_KEY` (optional; enables CAPTCHA verification)
+- `CAPTCHA_PROVIDER` (`hcaptcha` or `recaptcha`), `CAPTCHA_VERIFY_URL` (optional override), `CAPTCHA_MIN_SCORE` (optional)
+
+Security notes:
+- Server-side secrets (Brevo + Firebase Admin) must live only in Vercel Environment Variables.
+- Prefer Vercel "Sensitive" environment variables for secrets so values are write-only after creation.
+- Never commit `.env`, service account JSON files, or private keys to the repository.
+- Client-side env vars must use the `VITE_` prefix and must never contain secrets.
+- The email API defaults to 5 requests per 10 minutes per IP unless overridden.
+
+Secret rotation checklist (if a leak is suspected):
+1. Revoke and recreate the Brevo API key, then update the Vercel environment variable.
+2. Rotate the Firebase Admin service account key and update `FIREBASE_SERVICE_ACCOUNT_JSON` in Vercel.
+3. Review recent deployments, Vercel logs, and Git history for exposure.
+4. Redeploy to ensure new secrets are in use.
+5. If needed, invalidate user sessions in Firebase Auth.
 
 ## Idea Evolution
 
@@ -89,3 +110,4 @@ npm run dev
 - If you refresh and Drive actions stop working, sign out and sign back in to refresh the access token.
 - For security, image URLs must use `https://` (non-HTTPS URLs are rejected).
 - Persistent login is device/browser-specific; a new device or profile will require a fresh sign-in.
+- CI runs `npm run scan:secrets` to block accidental secret commits.

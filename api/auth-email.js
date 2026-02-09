@@ -19,6 +19,31 @@ const COLORS = {
 const DEFAULT_SUPPORT_EMAIL = 'federicoroldos1@gmail.com';
 const DEFAULT_APP_URL = 'https://sofull.site';
 const GOOGLE_SECURITY_URL = 'https://myaccount.google.com/security';
+const DEFAULT_ALLOWED_ORIGINS = [DEFAULT_APP_URL];
+const DEFAULT_DEV_ORIGINS = ['http://localhost:5173', 'http://localhost:3000'];
+
+const REDACTED_VALUE = '[REDACTED]';
+const SENSITIVE_KEYS = [
+  'authorization',
+  'api-key',
+  'apikey',
+  'api_key',
+  'token',
+  'secret',
+  'password',
+  'private_key',
+  'service_account',
+  'firebase',
+  'brevo',
+  'captcha'
+];
+const SENSITIVE_PATTERNS = [
+  /bearer\s+[a-z0-9._-]+/gi,
+  /(api[-_]?key\s*[:=]\s*)[a-z0-9._-]+/gi,
+  /-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----/g
+];
+const RATE_LIMIT_STORE = new Map();
+const RATE_LIMIT_STORE_MAX = 2000;
 
 const toFiniteNumber = (value) =>
   typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -30,6 +55,58 @@ const escapeHtml = (value) =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+
+const isSensitiveKey = (key) => {
+  const lowered = String(key || '').toLowerCase();
+  return SENSITIVE_KEYS.some((token) => lowered.includes(token));
+};
+
+const redactString = (value) => {
+  let redacted = String(value ?? '');
+  SENSITIVE_PATTERNS.forEach((pattern) => {
+    redacted = redacted.replace(pattern, (match, prefix) => {
+      if (prefix) return `${prefix}${REDACTED_VALUE}`;
+      return REDACTED_VALUE;
+    });
+  });
+  return redacted;
+};
+
+const sanitizeValue = (key, value, depth = 0) => {
+  if (value === null || value === undefined) return value;
+  if (isSensitiveKey(key)) return REDACTED_VALUE;
+  if (typeof value === 'string') return redactString(value);
+  if (typeof value !== 'object') return value;
+  if (depth > 3) return '[Object]';
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeValue(key, entry, depth + 1));
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([childKey, childValue]) => [
+      childKey,
+      sanitizeValue(childKey, childValue, depth + 1)
+    ])
+  );
+};
+
+const createSafeLogger = (context = {}) => {
+  const baseContext =
+    context && typeof context === 'object' ? sanitizeValue('context', context, 0) : {};
+  const log = (level, message, meta) => {
+    const safeMeta =
+      meta && typeof meta === 'object' ? sanitizeValue('meta', meta, 0) : meta ?? undefined;
+    if (safeMeta && typeof safeMeta === 'object') {
+      console[level](message, { ...baseContext, ...safeMeta });
+      return;
+    }
+    console[level](message, baseContext);
+  };
+  return {
+    info: (message, meta) => log('info', message, meta),
+    warn: (message, meta) => log('warn', message, meta),
+    error: (message, meta) => log('error', message, meta)
+  };
+};
 
 const normalizeBaseUrl = (value) => {
   if (!value) return null;
@@ -52,11 +129,126 @@ const joinUrl = (base, path) => {
   return `${safeBase}/${safePath}`;
 };
 
+const parseOriginList = (raw) =>
+  String(raw || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .filter((value) => value !== '*')
+    .map((value) => normalizeBaseUrl(value))
+    .filter(Boolean);
+
+const resolveAllowedOrigins = () => {
+  const allowed = new Set();
+  const fromEnv = process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || '';
+  const fromDev = process.env.DEV_CORS_ORIGINS || '';
+  const fromSite = [
+    process.env.PUBLIC_SITE_URL,
+    process.env.SITE_URL,
+    process.env.APP_BASE_URL
+  ];
+
+  parseOriginList(fromEnv).forEach((origin) => allowed.add(origin));
+  parseOriginList(fromDev).forEach((origin) => allowed.add(origin));
+  fromSite
+    .map((value) => normalizeBaseUrl(value))
+    .filter(Boolean)
+    .forEach((origin) => allowed.add(origin));
+
+  if (allowed.size === 0) {
+    DEFAULT_ALLOWED_ORIGINS.forEach((origin) => allowed.add(origin));
+  }
+
+  if (process.env.ALLOW_LOCALHOST_ORIGIN === 'true') {
+    DEFAULT_DEV_ORIGINS.forEach((origin) => allowed.add(origin));
+  }
+
+  return Array.from(allowed);
+};
+
+const getAllowedOrigin = (req, allowedOrigins) => {
+  const origin = req.headers.origin;
+  if (!origin) return '';
+  const normalized = normalizeBaseUrl(origin);
+  if (!normalized) return '';
+  const allowed = new Set(allowedOrigins.map((value) => normalizeBaseUrl(value)).filter(Boolean));
+  return allowed.has(normalized) ? origin : '';
+};
+
 const getHeader = (req, name) => {
   const value = req.headers?.[name.toLowerCase()];
   if (Array.isArray(value)) return value[0];
   if (typeof value === 'string') return value;
   return '';
+};
+
+const getRequestId = (req) =>
+  getHeader(req, 'x-vercel-id') || getHeader(req, 'x-request-id') || '';
+
+const getClientIp = (req) => {
+  const forwarded =
+    getHeader(req, 'x-forwarded-for') ||
+    getHeader(req, 'x-real-ip') ||
+    getHeader(req, 'x-vercel-forwarded-for') ||
+    getHeader(req, 'x-client-ip');
+  if (forwarded) {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.socket?.remoteAddress || '';
+};
+
+const hasBody = (req) => {
+  if (!req || req.body === undefined || req.body === null) return false;
+  if (typeof req.body === 'string') return req.body.trim().length > 0;
+  if (Buffer.isBuffer(req.body)) return req.body.length > 0;
+  if (typeof req.body === 'object') return Object.keys(req.body).length > 0;
+  return true;
+};
+
+const parseJsonBody = (req) => {
+  if (!hasBody(req)) return { body: null, error: null };
+  const contentType = getHeader(req, 'content-type');
+  if (!contentType || !contentType.toLowerCase().includes('application/json')) {
+    return { body: null, error: 'Unsupported content type.' };
+  }
+  if (typeof req.body === 'object') {
+    return { body: req.body, error: null };
+  }
+  if (typeof req.body === 'string') {
+    try {
+      return { body: JSON.parse(req.body), error: null };
+    } catch {
+      return { body: null, error: 'Invalid JSON payload.' };
+    }
+  }
+  return { body: null, error: 'Invalid request payload.' };
+};
+
+const validatePayload = (payload) => {
+  if (!payload) return { ok: true, data: {} };
+  if (typeof payload !== 'object' || Array.isArray(payload)) {
+    return { ok: false, error: 'Invalid request payload.' };
+  }
+  const allowedKeys = new Set(['captchaToken']);
+  for (const key of Object.keys(payload)) {
+    if (!allowedKeys.has(key)) {
+      return { ok: false, error: 'Invalid request payload.' };
+    }
+  }
+  const captchaToken = payload.captchaToken;
+  if (captchaToken !== undefined && typeof captchaToken !== 'string') {
+    return { ok: false, error: 'Invalid request payload.' };
+  }
+  return {
+    ok: true,
+    data: {
+      captchaToken: captchaToken ? captchaToken.trim() : ''
+    }
+  };
+};
+
+const sendError = (res, status, message) => {
+  res.status(status).json({ error: message });
 };
 
 const parseUserAgent = (userAgent) => {
@@ -560,6 +752,15 @@ const ensureFirebase = () => {
   initializeApp({ credential: cert(serviceAccount) });
 };
 
+class EmailProviderError extends Error {
+  constructor(message, status, details) {
+    super(message);
+    this.name = 'EmailProviderError';
+    this.status = status;
+    this.details = details;
+  }
+}
+
 const sendBrevoEmail = async ({ toEmail, toName, subject, textContent, htmlContent }) => {
   const apiKey = process.env.BREVO_API_KEY;
   const senderEmail = process.env.BREVO_SENDER_EMAIL;
@@ -586,22 +787,14 @@ const sendBrevoEmail = async ({ toEmail, toName, subject, textContent, htmlConte
   });
 
   if (!response.ok) {
-    const details = await response.text();
-    throw new Error(`Brevo request failed (${response.status}): ${details}`);
+    let details = '';
+    try {
+      details = await response.text();
+    } catch {
+      details = '';
+    }
+    throw new EmailProviderError('Brevo request failed.', response.status, details);
   }
-};
-
-const getAllowedOrigin = (req) => {
-  const origin = req.headers.origin;
-  const raw = process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || '*';
-  const allowed = raw
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean);
-
-  if (allowed.includes('*')) return '*';
-  if (!origin) return '';
-  return allowed.includes(origin) ? origin : '';
 };
 
 const getAppBaseUrl = (req, allowedOrigin) => {
@@ -609,7 +802,7 @@ const getAppBaseUrl = (req, allowedOrigin) => {
     process.env.PUBLIC_SITE_URL || process.env.SITE_URL || process.env.APP_BASE_URL
   );
   if (envUrl) return envUrl;
-  if (allowedOrigin && allowedOrigin !== '*') {
+  if (allowedOrigin) {
     const normalized = normalizeBaseUrl(allowedOrigin);
     if (normalized && !isLocalHostUrl(normalized)) return normalized;
   }
@@ -674,8 +867,104 @@ const buildEventUpdate = (event, status, timestamp) => ({
   ...(status === 'sent' ? { sentAt: timestamp } : { failedAt: timestamp })
 });
 
+const getRateLimitConfig = () => {
+  const windowSeconds = Number(
+    process.env.AUTH_EMAIL_RATE_LIMIT_WINDOW_SECONDS ||
+      process.env.RATE_LIMIT_WINDOW_SECONDS ||
+      '600'
+  );
+  const maxRequests = Number(
+    process.env.AUTH_EMAIL_RATE_LIMIT_MAX || process.env.RATE_LIMIT_MAX || '5'
+  );
+  return {
+    windowMs: Number.isFinite(windowSeconds) && windowSeconds > 0 ? windowSeconds * 1000 : 600000,
+    maxRequests: Number.isFinite(maxRequests) && maxRequests > 0 ? maxRequests : 5
+  };
+};
+
+const cleanupRateLimitStore = (now) => {
+  if (RATE_LIMIT_STORE.size <= RATE_LIMIT_STORE_MAX) return;
+  for (const [key, entry] of RATE_LIMIT_STORE.entries()) {
+    if (!entry || now >= entry.resetAt) {
+      RATE_LIMIT_STORE.delete(key);
+    }
+  }
+};
+
+const checkRateLimit = (key, config, now) => {
+  const timestamp = now || Date.now();
+  const entry = RATE_LIMIT_STORE.get(key);
+  if (!entry || timestamp >= entry.resetAt) {
+    const next = { count: 1, resetAt: timestamp + config.windowMs };
+    RATE_LIMIT_STORE.set(key, next);
+    cleanupRateLimitStore(timestamp);
+    return { allowed: true, remaining: config.maxRequests - 1, resetAt: next.resetAt };
+  }
+  entry.count += 1;
+  RATE_LIMIT_STORE.set(key, entry);
+  cleanupRateLimitStore(timestamp);
+  return {
+    allowed: entry.count <= config.maxRequests,
+    remaining: Math.max(0, config.maxRequests - entry.count),
+    resetAt: entry.resetAt
+  };
+};
+
+const verifyCaptcha = async ({ token, ip, logger }) => {
+  const secret = process.env.CAPTCHA_SECRET_KEY;
+  if (!secret) return { ok: true, skipped: true };
+  if (!token) return { ok: false, error: 'Captcha token required.' };
+
+  const provider = String(process.env.CAPTCHA_PROVIDER || 'hcaptcha').toLowerCase();
+  const verifyUrl =
+    process.env.CAPTCHA_VERIFY_URL ||
+    (provider === 'recaptcha'
+      ? 'https://www.google.com/recaptcha/api/siteverify'
+      : 'https://hcaptcha.com/siteverify');
+
+  const body = new URLSearchParams();
+  body.set('secret', secret);
+  body.set('response', token);
+  if (ip) body.set('remoteip', ip);
+
+  try {
+    const response = await fetch(verifyUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body
+    });
+    let data = null;
+    try {
+      data = await response.json();
+    } catch {
+      data = null;
+    }
+    const minScore = Number(process.env.CAPTCHA_MIN_SCORE || '0');
+    const scoreOk = !Number.isFinite(minScore) || minScore <= 0 || (data?.score ?? 1) >= minScore;
+    if (!response.ok || !data?.success || !scoreOk) {
+      logger?.warn('Captcha verification rejected.', {
+        status: response.status,
+        provider,
+        score: data?.score ?? null
+      });
+      return { ok: false, error: 'Captcha verification failed.' };
+    }
+    return { ok: true };
+  } catch (err) {
+    logger?.warn('Captcha verification request failed.', {
+      error: err instanceof Error ? err.message : String(err)
+    });
+    return { ok: false, error: 'Captcha verification failed.' };
+  }
+};
+
 export default async function handler(req, res) {
-  const allowedOrigin = getAllowedOrigin(req);
+  const requestId = getRequestId(req);
+  const logger = createSafeLogger({ requestId, route: 'auth-email' });
+  const allowedOrigins = resolveAllowedOrigins();
+  const allowedOrigin = getAllowedOrigin(req, allowedOrigins);
+  const origin = req.headers.origin;
+
   if (allowedOrigin) {
     res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
   }
@@ -685,10 +974,12 @@ export default async function handler(req, res) {
     'Access-Control-Allow-Headers',
     'Authorization, Content-Type, X-Client-Timezone, X-Client-Locale'
   );
+  res.setHeader('Cache-Control', 'no-store');
 
   if (req.method === 'OPTIONS') {
     if (!allowedOrigin) {
-      res.status(403).json({ error: 'Origin not allowed.' });
+      logger.warn('CORS preflight rejected.', { origin });
+      sendError(res, 403, 'Origin not allowed.');
       return;
     }
     res.status(204).end();
@@ -696,40 +987,82 @@ export default async function handler(req, res) {
   }
 
   if (!allowedOrigin) {
-    res.status(403).json({ error: 'Origin not allowed.' });
+    logger.warn('CORS origin rejected.', { origin });
+    sendError(res, 403, 'Origin not allowed.');
     return;
   }
 
   if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed.' });
+    res.setHeader('Allow', 'POST, OPTIONS');
+    sendError(res, 405, 'Method not allowed.');
+    return;
+  }
+
+  const { body, error: bodyError } = parseJsonBody(req);
+  if (bodyError) {
+    logger.warn('Invalid request body.', { reason: bodyError });
+    sendError(res, bodyError === 'Unsupported content type.' ? 415 : 400, 'Invalid request payload.');
+    return;
+  }
+
+  const validation = validatePayload(body);
+  if (!validation.ok) {
+    logger.warn('Invalid request payload.', { reason: validation.error });
+    sendError(res, 400, 'Invalid request payload.');
+    return;
+  }
+
+  const clientIp = getClientIp(req) || 'unknown';
+  const rateLimitConfig = getRateLimitConfig();
+  const rateLimit = checkRateLimit(clientIp, rateLimitConfig, Date.now());
+  if (!rateLimit.allowed) {
+    const retryAfter = Math.max(1, Math.ceil((rateLimit.resetAt - Date.now()) / 1000));
+    res.setHeader('Retry-After', String(retryAfter));
+    logger.warn('Rate limit exceeded.', { ip: clientIp, retryAfter });
+    sendError(res, 429, 'Too many requests. Please try again later.');
+    return;
+  }
+
+  const captchaResult = await verifyCaptcha({
+    token: validation.data.captchaToken,
+    ip: clientIp,
+    logger
+  });
+  if (!captchaResult.ok) {
+    sendError(res, 403, 'Captcha verification failed.');
     return;
   }
 
   try {
     ensureFirebase();
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Firebase initialization failed.';
-    res.status(500).json({ error: message });
+    logger.error('Firebase initialization failed.', {
+      error: err instanceof Error ? err.message : String(err)
+    });
+    sendError(res, 500, 'Email service unavailable.');
     return;
   }
 
   const idToken = getBearerToken(req);
   if (!idToken) {
-    res.status(401).json({ error: 'Missing Bearer token.' });
+    sendError(res, 401, 'Unauthorized.');
     return;
   }
 
   let decoded;
   try {
     decoded = await getAuth().verifyIdToken(idToken);
-  } catch {
-    res.status(401).json({ error: 'Invalid or expired token.' });
+  } catch (err) {
+    logger.warn('Token verification failed.', {
+      error: err instanceof Error ? err.message : String(err)
+    });
+    sendError(res, 401, 'Unauthorized.');
     return;
   }
 
   const email = decoded.email;
   if (!email) {
-    res.status(400).json({ error: 'No email on token.' });
+    sendError(res, 400, 'Invalid request.');
     return;
   }
 
@@ -740,179 +1073,195 @@ export default async function handler(req, res) {
   const authTimeSeconds = toFiniteNumber(decoded.auth_time);
   const authTimeMs = authTimeSeconds === null ? null : authTimeSeconds * 1000;
 
-  const db = getFirestore();
-  const stateRef = db.collection('email_state').doc(decoded.uid);
-  const stateSnap = await stateRef.get();
-  const state = stateSnap.exists ? stateSnap.data() : {};
-
-  const { shouldSendWelcome, shouldSendLogin } = computeEmailPlan({
-    state,
-    now,
-    authTimeMs,
-    loginCooldownMs
-  });
-
-  if (!shouldSendWelcome && !shouldSendLogin) {
-    res.status(200).json({ ok: true, skipped: true });
-    return;
-  }
-
-  const appUrl = getAppBaseUrl(req, allowedOrigin);
-  const logoUrl = getLogoUrl(appUrl);
-  const supportEmail = process.env.SUPPORT_EMAIL || DEFAULT_SUPPORT_EMAIL;
-  const privacyUrl = joinUrl(appUrl, 'privacy.html');
-  const termsUrl = joinUrl(appUrl, 'terms.html');
-
-  const locale = getClientLocale(req);
-  const timeZone = getClientTimeZone(req);
-  const timeZoneLabel = timeZone || 'UTC';
-  const loginTimestamp = formatTimestamp(authTimeMs || now, locale, timeZone);
-
-  const requestMeta = getRequestMeta(req);
-  const metaRows = buildMetaRows({
-    timeLabel: `Time (${timeZoneLabel})`,
-    timeValue: loginTimestamp,
-    device: requestMeta.device,
-    browser: requestMeta.browser,
-    city: requestMeta.city,
-    country: requestMeta.country
-  });
-
-  let sentWelcome = false;
-  let sentLogin = false;
-  let welcomeEvent = null;
-  let loginEvent = null;
-
   try {
-    if (shouldSendWelcome) {
-      const claim = await claimEmailEventInState({
-        db,
-        stateRef,
-        type: 'welcome',
-        authTimeMs,
-        now
-      });
-      if (claim.claimed) {
-        welcomeEvent = claim.event;
-        try {
-          const emailPayload = buildWelcomeEmail({
-            appUrl,
-            displayName,
-            supportEmail,
-            privacyUrl,
-            termsUrl,
-            accountEmail: email,
-            logoUrl
-          });
-          await sendBrevoEmail({
-            toEmail: email,
-            toName: displayName,
-            subject: process.env.WELCOME_EMAIL_SUBJECT || emailPayload.subject,
-            textContent: emailPayload.textContent,
-            htmlContent: emailPayload.htmlContent
-          });
-          sentWelcome = true;
-          welcomeEvent.sentAt = Date.now();
-        } catch (err) {
-          const failedAt = Date.now();
-          await stateRef.set(
-            {
-              emailEvents: {
-                welcome: buildEventUpdate(welcomeEvent, 'failed', failedAt)
-              }
-            },
-            { merge: true }
-          );
-          throw err;
-        }
-      }
-    }
+    const db = getFirestore();
+    const stateRef = db.collection('email_state').doc(decoded.uid);
+    const stateSnap = await stateRef.get();
+    const state = stateSnap.exists ? stateSnap.data() : {};
 
-    if (shouldSendLogin) {
-      const claim = await claimEmailEventInState({
-        db,
-        stateRef,
-        type: 'login',
-        authTimeMs,
-        now
-      });
-      if (claim.claimed) {
-        loginEvent = claim.event;
-        try {
-          const emailPayload = buildLoginEmail({
-            appUrl,
-            displayName,
-            supportEmail,
-            privacyUrl,
-            termsUrl,
-            metaRows,
-            accountEmail: email,
-            logoUrl
-          });
-          await sendBrevoEmail({
-            toEmail: email,
-            toName: displayName,
-            subject: process.env.LOGIN_EMAIL_SUBJECT || emailPayload.subject,
-            textContent: emailPayload.textContent,
-            htmlContent: emailPayload.htmlContent
-          });
-          sentLogin = true;
-          loginEvent.sentAt = Date.now();
-        } catch (err) {
-          const failedAt = Date.now();
-          await stateRef.set(
-            {
-              emailEvents: {
-                login: buildEventUpdate(loginEvent, 'failed', failedAt)
-              }
-            },
-            { merge: true }
-          );
-          throw err;
-        }
-      }
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to send email.';
-    res.status(502).json({ error: message });
-    return;
-  }
-
-  if (sentWelcome || sentLogin) {
-    const updates = buildEmailStateUpdates({
-      email,
-      displayName,
+    const { shouldSendWelcome, shouldSendLogin } = computeEmailPlan({
+      state,
       now,
       authTimeMs,
-      shouldSendWelcome: sentWelcome,
-      shouldSendLogin: sentLogin
+      loginCooldownMs
     });
 
-    const emailEvents = {};
-    if (sentWelcome && welcomeEvent) {
-      emailEvents.welcome = buildEventUpdate(
-        welcomeEvent,
-        'sent',
-        welcomeEvent.sentAt || Date.now()
-      );
-    }
-    if (sentLogin && loginEvent) {
-      emailEvents.login = buildEventUpdate(
-        loginEvent,
-        'sent',
-        loginEvent.sentAt || Date.now()
-      );
-    }
-    if (Object.keys(emailEvents).length) {
-      updates.emailEvents = emailEvents;
+    if (!shouldSendWelcome && !shouldSendLogin) {
+      res.status(200).json({ ok: true, skipped: true });
+      return;
     }
 
-    await stateRef.set(updates, { merge: true });
+    const appUrl = getAppBaseUrl(req, allowedOrigin);
+    const logoUrl = getLogoUrl(appUrl);
+    const supportEmail = process.env.SUPPORT_EMAIL || DEFAULT_SUPPORT_EMAIL;
+    const privacyUrl = joinUrl(appUrl, 'privacy.html');
+    const termsUrl = joinUrl(appUrl, 'terms.html');
+
+    const locale = getClientLocale(req);
+    const timeZone = getClientTimeZone(req);
+    const timeZoneLabel = timeZone || 'UTC';
+    const loginTimestamp = formatTimestamp(authTimeMs || now, locale, timeZone);
+
+    const requestMeta = getRequestMeta(req);
+    const metaRows = buildMetaRows({
+      timeLabel: `Time (${timeZoneLabel})`,
+      timeValue: loginTimestamp,
+      device: requestMeta.device,
+      browser: requestMeta.browser,
+      city: requestMeta.city,
+      country: requestMeta.country
+    });
+
+    let sentWelcome = false;
+    let sentLogin = false;
+    let welcomeEvent = null;
+    let loginEvent = null;
+
+    try {
+      if (shouldSendWelcome) {
+        const claim = await claimEmailEventInState({
+          db,
+          stateRef,
+          type: 'welcome',
+          authTimeMs,
+          now
+        });
+        if (claim.claimed) {
+          welcomeEvent = claim.event;
+          try {
+            const emailPayload = buildWelcomeEmail({
+              appUrl,
+              displayName,
+              supportEmail,
+              privacyUrl,
+              termsUrl,
+              accountEmail: email,
+              logoUrl
+            });
+            await sendBrevoEmail({
+              toEmail: email,
+              toName: displayName,
+              subject: process.env.WELCOME_EMAIL_SUBJECT || emailPayload.subject,
+              textContent: emailPayload.textContent,
+              htmlContent: emailPayload.htmlContent
+            });
+            sentWelcome = true;
+            welcomeEvent.sentAt = Date.now();
+          } catch (err) {
+            const failedAt = Date.now();
+            await stateRef.set(
+              {
+                emailEvents: {
+                  welcome: buildEventUpdate(welcomeEvent, 'failed', failedAt)
+                }
+              },
+              { merge: true }
+            );
+            throw err;
+          }
+        }
+      }
+
+      if (shouldSendLogin) {
+        const claim = await claimEmailEventInState({
+          db,
+          stateRef,
+          type: 'login',
+          authTimeMs,
+          now
+        });
+        if (claim.claimed) {
+          loginEvent = claim.event;
+          try {
+            const emailPayload = buildLoginEmail({
+              appUrl,
+              displayName,
+              supportEmail,
+              privacyUrl,
+              termsUrl,
+              metaRows,
+              accountEmail: email,
+              logoUrl
+            });
+            await sendBrevoEmail({
+              toEmail: email,
+              toName: displayName,
+              subject: process.env.LOGIN_EMAIL_SUBJECT || emailPayload.subject,
+              textContent: emailPayload.textContent,
+              htmlContent: emailPayload.htmlContent
+            });
+            sentLogin = true;
+            loginEvent.sentAt = Date.now();
+          } catch (err) {
+            const failedAt = Date.now();
+            await stateRef.set(
+              {
+                emailEvents: {
+                  login: buildEventUpdate(loginEvent, 'failed', failedAt)
+                }
+              },
+              { merge: true }
+            );
+            throw err;
+          }
+        }
+      }
+    } catch (err) {
+      if (err instanceof EmailProviderError) {
+        logger.error('Email provider request failed.', {
+          status: err.status,
+          details: err.details
+        });
+      } else {
+        logger.error('Failed to send email.', {
+          error: err instanceof Error ? err.message : String(err)
+        });
+      }
+      sendError(res, 502, 'Email service unavailable.');
+      return;
+    }
+
+    if (sentWelcome || sentLogin) {
+      const updates = buildEmailStateUpdates({
+        email,
+        displayName,
+        now,
+        authTimeMs,
+        shouldSendWelcome: sentWelcome,
+        shouldSendLogin: sentLogin
+      });
+
+      const emailEvents = {};
+      if (sentWelcome && welcomeEvent) {
+        emailEvents.welcome = buildEventUpdate(
+          welcomeEvent,
+          'sent',
+          welcomeEvent.sentAt || Date.now()
+        );
+      }
+      if (sentLogin && loginEvent) {
+        emailEvents.login = buildEventUpdate(
+          loginEvent,
+          'sent',
+          loginEvent.sentAt || Date.now()
+        );
+      }
+      if (Object.keys(emailEvents).length) {
+        updates.emailEvents = emailEvents;
+      }
+
+      await stateRef.set(updates, { merge: true });
+    }
+
+    res.status(200).json({
+      ok: true,
+      sentWelcome,
+      sentLogin
+    });
+  } catch (err) {
+    logger.error('Unhandled auth email error.', {
+      error: err instanceof Error ? err.message : String(err)
+    });
+    sendError(res, 500, 'Email service unavailable.');
   }
-
-  res.status(200).json({
-    ok: true,
-    sentWelcome,
-    sentLogin
-  });
 }
