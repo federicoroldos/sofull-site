@@ -276,7 +276,9 @@ const sendError = (res, status, message) => {
 };
 
 const parseUserAgent = (userAgent) => {
-  if (!userAgent) return { browser: null, device: null };
+  if (!userAgent) {
+    return { browser: null, device: null, os: null, deviceType: null };
+  }
   const ua = userAgent.toLowerCase();
   let browser = null;
 
@@ -299,7 +301,33 @@ const parseUserAgent = (userAgent) => {
 
   const device = os ? `${os} (${deviceType})` : deviceType;
 
-  return { browser, device };
+  return { browser, device, os, deviceType };
+};
+
+const normalizeDeviceModel = (value) => {
+  const trimmed = String(value ?? '').trim();
+  if (!trimmed) return null;
+  return trimmed.replace(/\s+/g, ' ');
+};
+
+const toPossessive = (value) => {
+  const trimmed = String(value ?? '').trim();
+  if (!trimmed) return null;
+  return /s$/i.test(trimmed) ? `${trimmed}'` : `${trimmed}'s`;
+};
+
+const formatDeviceLabel = ({ displayName, deviceModel, os, deviceType, deviceFallback }) => {
+  const base = [os, deviceType].filter(Boolean).join(' ');
+  const normalizedModel = normalizeDeviceModel(deviceModel);
+  const owner = toPossessive(displayName);
+  const namedModel =
+    normalizedModel && owner ? `${owner} ${normalizedModel}` : normalizedModel;
+
+  if (namedModel && base) return `${namedModel} (${base})`;
+  if (namedModel) return namedModel;
+  if (deviceFallback) return deviceFallback;
+  if (base) return base;
+  return null;
 };
 
 const getClientLocale = (req) => {
@@ -338,7 +366,8 @@ const formatTimestamp = (timestampMs, locale, timeZone) => {
 
 const getRequestMeta = (req) => {
   const userAgent = getHeader(req, 'user-agent');
-  const { browser, device } = parseUserAgent(userAgent);
+  const { browser, device, os, deviceType } = parseUserAgent(userAgent);
+  const deviceModel = getHeader(req, 'x-client-device-model');
 
   const city = getHeader(req, 'x-vercel-ip-city') || getHeader(req, 'x-appengine-city');
   const country =
@@ -350,6 +379,9 @@ const getRequestMeta = (req) => {
     userAgent,
     browser,
     device,
+    os,
+    deviceType,
+    deviceModel: deviceModel || null,
     city: city || null,
     country: country || null
   };
@@ -997,7 +1029,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader(
     'Access-Control-Allow-Headers',
-    'Authorization, Content-Type, X-Client-Timezone, X-Client-Locale'
+    'Authorization, Content-Type, X-Client-Timezone, X-Client-Locale, X-Client-Device-Model'
   );
   res.setHeader('Cache-Control', 'no-store');
 
@@ -1137,11 +1169,18 @@ export default async function handler(req, res) {
     const loginTimestamp = formatTimestamp(authTimeMs || now, locale, timeZone);
 
     const requestMeta = getRequestMeta(req);
+    const deviceLabel = formatDeviceLabel({
+      displayName,
+      deviceModel: requestMeta.deviceModel,
+      os: requestMeta.os,
+      deviceType: requestMeta.deviceType,
+      deviceFallback: requestMeta.device
+    });
     const maskedIp = maskIp(clientIp);
     const metaRows = buildMetaRows({
       timeLabel: `Time (${timeZoneLabel})`,
       timeValue: loginTimestamp,
-      device: requestMeta.device,
+      device: deviceLabel,
       browser: requestMeta.browser,
       city: requestMeta.city,
       country: requestMeta.country,
