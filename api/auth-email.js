@@ -40,8 +40,7 @@ const SENSITIVE_KEYS = [
   'private_key',
   'service_account',
   'firebase',
-  'brevo',
-  'captcha'
+  'brevo'
 ];
 const SENSITIVE_PATTERNS = [
   /bearer\s+[a-z0-9._-]+/gi,
@@ -219,56 +218,6 @@ const maskIp = (value) => {
   const parts = trimmed.split('.');
   if (parts.length !== 4) return trimmed;
   return `${parts[0]}.${parts[1]}.${parts[2]}.xxx`;
-};
-
-const hasBody = (req) => {
-  if (!req || req.body === undefined || req.body === null) return false;
-  if (typeof req.body === 'string') return req.body.trim().length > 0;
-  if (Buffer.isBuffer(req.body)) return req.body.length > 0;
-  if (typeof req.body === 'object') return Object.keys(req.body).length > 0;
-  return true;
-};
-
-const parseJsonBody = (req) => {
-  if (!hasBody(req)) return { body: null, error: null };
-  const contentType = getHeader(req, 'content-type');
-  if (!contentType || !contentType.toLowerCase().includes('application/json')) {
-    return { body: null, error: 'Unsupported content type.' };
-  }
-  if (typeof req.body === 'object') {
-    return { body: req.body, error: null };
-  }
-  if (typeof req.body === 'string') {
-    try {
-      return { body: JSON.parse(req.body), error: null };
-    } catch {
-      return { body: null, error: 'Invalid JSON payload.' };
-    }
-  }
-  return { body: null, error: 'Invalid request payload.' };
-};
-
-const validatePayload = (payload) => {
-  if (!payload) return { ok: true, data: {} };
-  if (typeof payload !== 'object' || Array.isArray(payload)) {
-    return { ok: false, error: 'Invalid request payload.' };
-  }
-  const allowedKeys = new Set(['captchaToken']);
-  for (const key of Object.keys(payload)) {
-    if (!allowedKeys.has(key)) {
-      return { ok: false, error: 'Invalid request payload.' };
-    }
-  }
-  const captchaToken = payload.captchaToken;
-  if (captchaToken !== undefined && typeof captchaToken !== 'string') {
-    return { ok: false, error: 'Invalid request payload.' };
-  }
-  return {
-    ok: true,
-    data: {
-      captchaToken: captchaToken ? captchaToken.trim() : ''
-    }
-  };
 };
 
 const sendError = (res, status, message) => {
@@ -967,54 +916,6 @@ const checkRateLimit = (key, config, now) => {
   };
 };
 
-const verifyCaptcha = async ({ token, ip, logger }) => {
-  const secret = process.env.CAPTCHA_SECRET_KEY;
-  if (!secret) return { ok: true, skipped: true };
-  if (!token) return { ok: false, error: 'Captcha token required.' };
-
-  const provider = String(process.env.CAPTCHA_PROVIDER || 'hcaptcha').toLowerCase();
-  const verifyUrl =
-    process.env.CAPTCHA_VERIFY_URL ||
-    (provider === 'recaptcha'
-      ? 'https://www.google.com/recaptcha/api/siteverify'
-      : 'https://hcaptcha.com/siteverify');
-
-  const body = new URLSearchParams();
-  body.set('secret', secret);
-  body.set('response', token);
-  if (ip) body.set('remoteip', ip);
-
-  try {
-    const response = await fetch(verifyUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body
-    });
-    let data = null;
-    try {
-      data = await response.json();
-    } catch {
-      data = null;
-    }
-    const minScore = Number(process.env.CAPTCHA_MIN_SCORE || '0');
-    const scoreOk = !Number.isFinite(minScore) || minScore <= 0 || (data?.score ?? 1) >= minScore;
-    if (!response.ok || !data?.success || !scoreOk) {
-      logger?.warn('Captcha verification rejected.', {
-        status: response.status,
-        provider,
-        score: data?.score ?? null
-      });
-      return { ok: false, error: 'Captcha verification failed.' };
-    }
-    return { ok: true };
-  } catch (err) {
-    logger?.warn('Captcha verification request failed.', {
-      error: err instanceof Error ? err.message : String(err)
-    });
-    return { ok: false, error: 'Captcha verification failed.' };
-  }
-};
-
 export default async function handler(req, res) {
   const requestId = getRequestId(req);
   const logger = createSafeLogger({ requestId, route: 'auth-email' });
@@ -1055,20 +956,6 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { body, error: bodyError } = parseJsonBody(req);
-  if (bodyError) {
-    logger.warn('Invalid request body.', { reason: bodyError });
-    sendError(res, bodyError === 'Unsupported content type.' ? 415 : 400, 'Invalid request payload.');
-    return;
-  }
-
-  const validation = validatePayload(body);
-  if (!validation.ok) {
-    logger.warn('Invalid request payload.', { reason: validation.error });
-    sendError(res, 400, 'Invalid request payload.');
-    return;
-  }
-
   const clientIp = getClientIp(req) || 'unknown';
   const rateLimitConfig = getRateLimitConfig();
   const rateLimit = checkRateLimit(clientIp, rateLimitConfig, Date.now());
@@ -1077,16 +964,6 @@ export default async function handler(req, res) {
     res.setHeader('Retry-After', String(retryAfter));
     logger.warn('Rate limit exceeded.', { ip: clientIp, retryAfter });
     sendError(res, 429, 'Too many requests. Please try again later.');
-    return;
-  }
-
-  const captchaResult = await verifyCaptcha({
-    token: validation.data.captchaToken,
-    ip: clientIp,
-    logger
-  });
-  if (!captchaResult.ok) {
-    sendError(res, 403, 'Captcha verification failed.');
     return;
   }
 
