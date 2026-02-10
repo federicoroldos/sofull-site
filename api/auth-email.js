@@ -345,7 +345,6 @@ const buildMetaRows = ({ timeLabel, timeValue, device, browser, city, country, i
   if (locationParts.length) {
     rows.push({ label: 'Location', value: locationParts.join(', ') });
   }
-  if (ip) rows.push({ label: 'IP (masked)', value: ip });
   return rows;
 };
 
