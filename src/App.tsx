@@ -112,7 +112,8 @@ const parseDataFile = (payload: string): SofullDataFile => {
   }
 };
 
-const createId = () => (crypto?.randomUUID ? crypto.randomUUID() : `sofull-${Date.now()}`);
+const createId = () =>
+  (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `sofull-${Date.now()}`);
 const normalizeFileNamePart = (value: string) => value.replace(/[\\/]+/g, '-').replace(/\s+/g, ' ').trim();
 const buildImageFileName = (name: string, nameEnglish: string, originalFileName: string) => {
   const koreanName = normalizeFileNamePart(name);

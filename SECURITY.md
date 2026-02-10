@@ -43,5 +43,4 @@ Client code may only use `VITE_*` variables (non-secret):
 - Serverless email endpoint validates payloads and redacts sensitive log fields.
 - Rate limiting is enforced per IP and per user.
 - CORS is restricted to explicit allowlists (including Capacitor mobile origins).
-- Android tokens are stored in the device keystore via `capacitor-secure-storage-plugin`.
 - Client uses Firebase ID tokens for auth-email requests; no server secrets are exposed.

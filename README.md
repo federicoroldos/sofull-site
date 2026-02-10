@@ -14,7 +14,7 @@ Try it out [here](https://sofull.site).
 
 ## How It Works
 
-This is a fully client-side app. Google Sign-In identifies the user, and a JSON file is stored
+This is a fully client-side web app. Google Sign-In identifies the user, and a JSON file is stored
 in Google Drive `appDataFolder`. The file is created on first login and updated on every change.
 If you upload an image, it is stored in your Google Drive in a `배불러! (So Full!)/images` folder
 and referenced by its Drive file ID. If you use an image URL, it must be `https://`.
@@ -27,7 +27,7 @@ Logins persist on the same device/browser profile for up to 6 months by default.
 - Each subsequent login sends one login notification email.
 - Sign-up does not also send a login email.
 - Emails are branded to match the site and include privacy/terms links.
-- Login emails include sign-in time, device/browser, and approximate city/country when available, plus a Google security callout.
+- Login emails include sign-in time, device name/model (when available), device/browser, and approximate city/country, plus a Google security callout.
 
 Environment variables for email delivery:
 - `BREVO_API_KEY`, `BREVO_SENDER_EMAIL`, `BREVO_SENDER_NAME`
@@ -99,17 +99,6 @@ cp .env.example .env
 ```bash
 npm run dev
 ```
-
-## Android
-
-See `ANDROID_SETUP.md` for full instructions (Firebase setup, SHA-1, emulator/device, APK/AAB).
-
-Quick commands:
-- `npm install`
-- `npm run android:build`
-- `npm run android:open`
-- `npm run android:apk`
-- `npm run android:aab`
 
 ## Google OAuth + Drive Configuration
 
