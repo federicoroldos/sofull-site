@@ -40,8 +40,6 @@ Environment variables for email delivery:
 - `DEV_CORS_ORIGINS` (optional dev allowlist, ex: `http://localhost:5173`)
 - `ALLOW_LOCALHOST_ORIGIN` (set to `true` to include common localhost origins)
 - `AUTH_EMAIL_RATE_LIMIT_MAX`, `AUTH_EMAIL_RATE_LIMIT_WINDOW_SECONDS`
-- `CAPTCHA_SECRET_KEY` (optional; enables CAPTCHA verification)
-- `CAPTCHA_PROVIDER` (`hcaptcha` or `recaptcha`), `CAPTCHA_VERIFY_URL` (optional override), `CAPTCHA_MIN_SCORE` (optional)
 
 ## Deployment (GitHub Pages + Vercel API)
 
