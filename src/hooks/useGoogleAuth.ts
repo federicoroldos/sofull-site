@@ -375,7 +375,39 @@ export const useGoogleAuth = () => {
   const refreshAccessToken = useCallback(
     async (options?: { interactive?: boolean; force?: boolean }) => {
       if (IS_NATIVE) {
-        if (!options?.interactive) return accessTokenRef.current;
+        const trySilentRefresh = async () => {
+          try {
+            await ensureNativeSocialLogin();
+            try {
+              await SocialLogin.refresh({
+                provider: 'google',
+                options: { scopes: GOOGLE_SCOPES, forceRefreshToken: true }
+              });
+            } catch {
+              // Ignore refresh failures and fall back to authorization code.
+            }
+            const authorization = await SocialLogin.getAuthorizationCode({ provider: 'google' });
+            const accessToken = authorization.accessToken ?? null;
+            if (accessToken) {
+              applyAccessToken(accessToken);
+            }
+            return accessToken;
+          } catch {
+            return null;
+          }
+        };
+
+        if (!options?.interactive) {
+          if (options?.force || !accessTokenRef.current) {
+            const refreshed = await trySilentRefresh();
+            if (refreshed) return refreshed;
+          }
+          return accessTokenRef.current;
+        }
+
+        const refreshed = await trySilentRefresh();
+        if (refreshed) return refreshed;
+
         try {
           await ensureNativeSocialLogin();
           const response = await SocialLogin.login({
@@ -430,8 +462,11 @@ export const useGoogleAuth = () => {
     async (options?: { interactive?: boolean; forceRefresh?: boolean }) => {
       const current = accessTokenRef.current;
       if (IS_NATIVE) {
-        if (options?.interactive && (options?.forceRefresh || !current)) {
-          return await refreshAccessToken({ interactive: true, force: options?.forceRefresh });
+        if (options?.forceRefresh || !current) {
+          return await refreshAccessToken({
+            interactive: options?.interactive,
+            force: options?.forceRefresh
+          });
         }
         return current;
       }
@@ -515,12 +550,12 @@ export const useGoogleAuth = () => {
   }, [user, sessionStartMs, forceSessionLogout]);
 
   useEffect(() => {
-    if (!user || IS_NATIVE) return;
+    if (!user) return;
     void refreshAccessToken({ interactive: false });
   }, [user, refreshAccessToken]);
 
   useEffect(() => {
-    if (!user || IS_NATIVE) return;
+    if (!user) return;
     if (!Number.isFinite(ACCESS_TOKEN_REFRESH_INTERVAL_MS) || ACCESS_TOKEN_REFRESH_INTERVAL_MS <= 0) {
       return;
     }
