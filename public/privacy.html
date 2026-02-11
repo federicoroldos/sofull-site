@@ -44,6 +44,36 @@
         padding: 48px 24px 56px;
       }
 
+      .page__top {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        margin-bottom: 10px;
+      }
+
+      .back-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        border-radius: 999px;
+        border: 2px solid var(--outline);
+        background: var(--paper-accent);
+        color: var(--outline);
+        font-weight: 700;
+        text-decoration: none;
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.06);
+      }
+
+      .back-button:hover {
+        background: #fffdf8;
+      }
+
+      .back-button:focus-visible {
+        outline: 3px solid rgba(31, 42, 46, 0.2);
+        outline-offset: 2px;
+      }
+
       .eyebrow {
         font-family: 'Nanum Pen Script', cursive;
         font-size: 25px;
@@ -101,6 +131,9 @@
   </head>
   <body>
     <main class="page">
+      <div class="page__top">
+        <a class="back-button" href="/">← Back</a>
+      </div>
       <p class="eyebrow"><a class="eyebrow-link" href="/">So Full!</a></p>
       <h1>Privacy Policy</h1>
       <p class="meta">Effective date: February 11, 2026</p>
@@ -219,4 +252,3 @@
     </main>
   </body>
 </html>
-
