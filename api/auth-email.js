@@ -16,7 +16,7 @@ const COLORS = {
   card: '#fffdf8'
 };
 
-const DEFAULT_SUPPORT_EMAIL = 'federicoroldos1@gmail.com';
+const DEFAULT_SUPPORT_EMAIL = 'support@sofull.site';
 const DEFAULT_APP_URL = 'https://sofull.site';
 const GOOGLE_SECURITY_URL = 'https://myaccount.google.com/security';
 const DEFAULT_NATIVE_ORIGINS = [
