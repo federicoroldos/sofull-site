@@ -2,6 +2,7 @@ package site.sofull.app;
 
 import android.content.Intent;
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.PluginHandle;
 import ee.forgr.capacitor.social.login.GoogleProvider;
 import ee.forgr.capacitor.social.login.ModifiedMainActivityForSocialLoginPlugin;
 import ee.forgr.capacitor.social.login.SocialLoginPlugin;
@@ -18,8 +19,9 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
 
     if (requestCode >= GoogleProvider.REQUEST_AUTHORIZE_GOOGLE_MIN
         && requestCode <= GoogleProvider.REQUEST_AUTHORIZE_GOOGLE_MAX) {
-      SocialLoginPlugin plugin = (SocialLoginPlugin) getBridge().getPlugin("SocialLogin");
-      if (plugin != null) {
+      PluginHandle handle = getBridge().getPlugin("SocialLogin");
+      if (handle != null && handle.getInstance() instanceof SocialLoginPlugin) {
+        SocialLoginPlugin plugin = (SocialLoginPlugin) handle.getInstance();
         plugin.handleGoogleLoginIntent(requestCode, data);
       }
     }
