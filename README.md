@@ -41,6 +41,9 @@ Environment variables for email delivery:
 - `ALLOW_LOCALHOST_ORIGIN` (set to `true` to include common localhost origins)
 - `AUTH_EMAIL_RATE_LIMIT_MAX`, `AUTH_EMAIL_RATE_LIMIT_WINDOW_SECONDS`
 
+Support inbox note:
+- If you use Cloudflare Email Routing to forward `support@sofull.site`, you still set `SUPPORT_EMAIL` and `BREVO_SENDER_EMAIL` to that address. Cloudflare handles receiving; Brevo handles sending. If Cloudflare asks for an SPF record, merge it with Brevo's SPF into a single SPF record.
+
 ## Deployment (GitHub Pages + Vercel API)
 
 The app is static and can be hosted on GitHub Pages, while the email API
