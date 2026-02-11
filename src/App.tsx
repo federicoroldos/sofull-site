@@ -5,6 +5,7 @@ import { useGoogleAuth } from './hooks/useGoogleAuth';
 import {
   deleteDriveFile,
   downloadFromAppData,
+  DriveAuthError,
   ensureAppDataFile,
   ensureFolder,
   fetchFileBlob,
@@ -131,6 +132,7 @@ const App = () => {
     accessToken,
     tokenExpired,
     clearTokenExpired,
+    markTokenExpired,
     loading: authLoading,
     error: authError,
     signIn,
@@ -152,6 +154,11 @@ const App = () => {
   const imageFolderIdRef = useRef<string | null>(null);
 
   const isLoggedIn = Boolean(user && accessToken);
+  const handleDriveAuthError = (error: unknown) => {
+    if (error instanceof DriveAuthError) {
+      markTokenExpired();
+    }
+  };
 
   const collatorEn = useMemo(() => new Intl.Collator('en', { sensitivity: 'base' }), []);
   const collatorKo = useMemo(() => new Intl.Collator('ko', { sensitivity: 'base' }), []);
@@ -259,6 +266,7 @@ const App = () => {
         await uploadToAppData(accessToken, fileId, JSON.stringify(DEFAULT_DATA, null, 2));
       }
     } catch (error) {
+      handleDriveAuthError(error);
       const message = error instanceof Error ? error.message : 'Drive load failed.';
       setSyncState('error');
       setSyncMessage(message);
@@ -280,6 +288,7 @@ const App = () => {
       setSyncState('idle');
       setSyncMessage(`Last synced ${new Date().toLocaleTimeString([], { hour12: false })}.`);
     } catch (error) {
+      handleDriveAuthError(error);
       const message = error instanceof Error ? error.message : 'Drive sync failed.';
       setSyncState('error');
       setSyncMessage(message);
@@ -300,103 +309,108 @@ const App = () => {
   };
 
   const handleSaveEntry = async (values: EntryFormSubmitValues) => {
-    if (!accessToken) {
-      throw new Error('Google session expired. Sign in again before saving.');
-    }
-
-    let nextImageDriveFileId = editingEntry?.imageDriveFileId || '';
-    let nextImageMimeType = editingEntry?.imageMimeType || '';
-    let nextImageName = editingEntry?.imageName || '';
-    let nextImageUrl = values.imageUrl;
-
-    if (values.clearImage) {
-      if (editingEntry?.imageDriveFileId) {
-        await deleteDriveFile(accessToken, editingEntry.imageDriveFileId);
+    try {
+      if (!accessToken) {
+        throw new Error('Google session expired. Sign in again before saving.');
       }
-      nextImageDriveFileId = '';
-      nextImageMimeType = '';
-      nextImageName = '';
-      nextImageUrl = '';
-    }
 
-    if (values.imageFile) {
-      if (!values.imageFile.type.startsWith('image/')) {
-        throw new Error('Please choose a valid image file.');
-      }
-      if (values.imageFile.size > MAX_IMAGE_SIZE_BYTES) {
-        throw new Error('Image size must be 8MB or less.');
-      }
-      const folderId = await ensureImageFolderId();
-      const imageName = buildImageFileName(values.name, values.nameEnglish, values.imageFile.name);
-      const uploadedImage = await uploadFileMultipart(accessToken, values.imageFile, folderId, imageName);
-      nextImageDriveFileId = uploadedImage.id;
-      nextImageMimeType = uploadedImage.mimeType;
-      nextImageName = uploadedImage.name;
-      if (editingEntry?.imageDriveFileId) {
-        await deleteDriveFile(accessToken, editingEntry.imageDriveFileId);
-      }
-    }
+      let nextImageDriveFileId = editingEntry?.imageDriveFileId || '';
+      let nextImageMimeType = editingEntry?.imageMimeType || '';
+      let nextImageName = editingEntry?.imageName || '';
+      let nextImageUrl = values.imageUrl;
 
-    if (
-      editingEntry?.imageDriveFileId &&
-      !values.clearImage &&
-      !values.imageFile
-    ) {
-      const desiredImageName = buildImageFileName(
-        values.name,
-        values.nameEnglish,
-        editingEntry.imageName || ''
-      );
-      if (desiredImageName && desiredImageName !== editingEntry.imageName) {
-        const updatedImage = await updateDriveFileName(
-          accessToken,
-          editingEntry.imageDriveFileId,
-          desiredImageName
+      if (values.clearImage) {
+        if (editingEntry?.imageDriveFileId) {
+          await deleteDriveFile(accessToken, editingEntry.imageDriveFileId);
+        }
+        nextImageDriveFileId = '';
+        nextImageMimeType = '';
+        nextImageName = '';
+        nextImageUrl = '';
+      }
+
+      if (values.imageFile) {
+        if (!values.imageFile.type.startsWith('image/')) {
+          throw new Error('Please choose a valid image file.');
+        }
+        if (values.imageFile.size > MAX_IMAGE_SIZE_BYTES) {
+          throw new Error('Image size must be 8MB or less.');
+        }
+        const folderId = await ensureImageFolderId();
+        const imageName = buildImageFileName(values.name, values.nameEnglish, values.imageFile.name);
+        const uploadedImage = await uploadFileMultipart(accessToken, values.imageFile, folderId, imageName);
+        nextImageDriveFileId = uploadedImage.id;
+        nextImageMimeType = uploadedImage.mimeType;
+        nextImageName = uploadedImage.name;
+        if (editingEntry?.imageDriveFileId) {
+          await deleteDriveFile(accessToken, editingEntry.imageDriveFileId);
+        }
+      }
+
+      if (
+        editingEntry?.imageDriveFileId &&
+        !values.clearImage &&
+        !values.imageFile
+      ) {
+        const desiredImageName = buildImageFileName(
+          values.name,
+          values.nameEnglish,
+          editingEntry.imageName || ''
         );
-        nextImageName = updatedImage.name;
+        if (desiredImageName && desiredImageName !== editingEntry.imageName) {
+          const updatedImage = await updateDriveFileName(
+            accessToken,
+            editingEntry.imageDriveFileId,
+            desiredImageName
+          );
+          nextImageName = updatedImage.name;
+        }
       }
-    }
 
-    const entryPayload = {
-      name: values.name,
-      nameEnglish: values.nameEnglish,
-      brand: values.brand,
-      category: values.category,
-      formFactor: values.formFactor,
-      iceCreamFormFactor: values.iceCreamFormFactor,
-      rating: values.rating,
-      spiciness: values.spiciness,
-      description: values.description,
-      imageUrl: nextImageUrl,
-      imageDriveFileId: nextImageDriveFileId,
-      imageMimeType: nextImageMimeType,
-      imageName: nextImageName
-    };
-
-    if (editingEntry) {
-      const updatedEntry: SofullEntry = {
-        ...editingEntry,
-        ...entryPayload,
-        updatedAt: nowIso()
+      const entryPayload = {
+        name: values.name,
+        nameEnglish: values.nameEnglish,
+        brand: values.brand,
+        category: values.category,
+        formFactor: values.formFactor,
+        iceCreamFormFactor: values.iceCreamFormFactor,
+        rating: values.rating,
+        spiciness: values.spiciness,
+        description: values.description,
+        imageUrl: nextImageUrl,
+        imageDriveFileId: nextImageDriveFileId,
+        imageMimeType: nextImageMimeType,
+        imageName: nextImageName
       };
-      const nextEntries = sanitizeEntries(
-        entries.map((entry) => (entry.id === editingEntry.id ? updatedEntry : entry))
-      );
-      setEntries(nextEntries);
-      await saveToDrive(nextEntries);
-    } else {
-      const newEntry: SofullEntry = {
-        id: createId(),
-        createdAt: nowIso(),
-        updatedAt: nowIso(),
-        ...entryPayload
-      };
-      const nextEntries = sanitizeEntries([newEntry, ...entries]);
-      setEntries(nextEntries);
-      await saveToDrive(nextEntries);
-    }
 
-    closeModal();
+      if (editingEntry) {
+        const updatedEntry: SofullEntry = {
+          ...editingEntry,
+          ...entryPayload,
+          updatedAt: nowIso()
+        };
+        const nextEntries = sanitizeEntries(
+          entries.map((entry) => (entry.id === editingEntry.id ? updatedEntry : entry))
+        );
+        setEntries(nextEntries);
+        await saveToDrive(nextEntries);
+      } else {
+        const newEntry: SofullEntry = {
+          id: createId(),
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+          ...entryPayload
+        };
+        const nextEntries = sanitizeEntries([newEntry, ...entries]);
+        setEntries(nextEntries);
+        await saveToDrive(nextEntries);
+      }
+
+      closeModal();
+    } catch (error) {
+      handleDriveAuthError(error);
+      throw error;
+    }
   };
 
   const handleDelete = (entry: SofullEntry) => {
@@ -409,6 +423,7 @@ const App = () => {
         try {
           await deleteDriveFile(accessToken, entry.imageDriveFileId);
         } catch (error) {
+          handleDriveAuthError(error);
           const message = error instanceof Error ? error.message : 'Drive image delete failed.';
           setSyncState('error');
           setSyncMessage(message);
@@ -464,6 +479,7 @@ const App = () => {
           await uploadToAppData(accessToken, fileId, JSON.stringify(DEFAULT_DATA, null, 2));
         }
       } catch (error) {
+        handleDriveAuthError(error);
         const message = error instanceof Error ? error.message : 'Drive load failed.';
         setSyncState('error');
         setSyncMessage(message);
@@ -529,7 +545,8 @@ const App = () => {
           driveImageCacheRef.current.set(fileId, objectUrl);
           return objectUrl;
         })
-        .catch(() => {
+        .catch((error) => {
+          handleDriveAuthError(error);
           failedDriveImageRef.current.add(fileId);
           return '';
         })
