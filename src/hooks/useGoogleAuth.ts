@@ -368,7 +368,27 @@ export const useGoogleAuth = () => {
 
   const refreshAccessToken = useCallback(
     async (options?: { interactive?: boolean; force?: boolean }) => {
-      if (IS_NATIVE || !GOOGLE_WEB_CLIENT_ID) return accessTokenRef.current;
+      if (IS_NATIVE) {
+        if (!options?.interactive) return accessTokenRef.current;
+        try {
+          await ensureNativeSocialLogin();
+          const response = await SocialLogin.login({
+            provider: 'google',
+            options: { scopes: GOOGLE_SCOPES }
+          });
+          if (response.provider !== 'google') return accessTokenRef.current;
+          const result = response.result;
+          if (result.responseType !== 'online') return accessTokenRef.current;
+          const accessToken = result.accessToken?.token ?? null;
+          if (accessToken) {
+            applyAccessToken(accessToken);
+          }
+          return accessToken ?? accessTokenRef.current;
+        } catch {
+          return accessTokenRef.current;
+        }
+      }
+      if (!GOOGLE_WEB_CLIENT_ID) return accessTokenRef.current;
       if (refreshPromiseRef.current && !options?.force) {
         return refreshPromiseRef.current;
       }
@@ -398,6 +418,30 @@ export const useGoogleAuth = () => {
       }
     },
     [applyAccessToken, auth, requestGisAccessToken]
+  );
+
+  const getAccessToken = useCallback(
+    async (options?: { interactive?: boolean; forceRefresh?: boolean }) => {
+      const current = accessTokenRef.current;
+      if (IS_NATIVE) {
+        if (options?.interactive && (options?.forceRefresh || !current)) {
+          return await refreshAccessToken({ interactive: true, force: options?.forceRefresh });
+        }
+        return current;
+      }
+      if (!GOOGLE_WEB_CLIENT_ID) return current;
+      const expiresAt = accessTokenExpiresAt;
+      const shouldRefresh =
+        options?.forceRefresh ||
+        !current ||
+        (expiresAt && Date.now() >= expiresAt - ACCESS_TOKEN_REFRESH_BUFFER_MS);
+      if (!shouldRefresh) return current;
+      return await refreshAccessToken({
+        interactive: options?.interactive,
+        force: options?.forceRefresh
+      });
+    },
+    [accessTokenExpiresAt, refreshAccessToken]
   );
 
   const forceSessionLogout = useCallback(async (reason?: string) => {
@@ -624,6 +668,7 @@ export const useGoogleAuth = () => {
     markTokenExpired,
     loading,
     error,
+    getAccessToken,
     signIn,
     signOut: signOutUser
   };
