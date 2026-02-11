@@ -8,6 +8,7 @@ import {
   ensureAppDataFile,
   ensureFolder,
   fetchFileBlob,
+  updateDriveFileName,
   uploadFileMultipart,
   uploadToAppData
 } from './utils/googleDriveClient';
@@ -309,6 +310,26 @@ const App = () => {
       nextImageName = uploadedImage.name;
       if (editingEntry?.imageDriveFileId) {
         await deleteDriveFile(accessToken, editingEntry.imageDriveFileId);
+      }
+    }
+
+    if (
+      editingEntry?.imageDriveFileId &&
+      !values.clearImage &&
+      !values.imageFile
+    ) {
+      const desiredImageName = buildImageFileName(
+        values.name,
+        values.nameEnglish,
+        editingEntry.imageName || ''
+      );
+      if (desiredImageName && desiredImageName !== editingEntry.imageName) {
+        const updatedImage = await updateDriveFileName(
+          accessToken,
+          editingEntry.imageDriveFileId,
+          desiredImageName
+        );
+        nextImageName = updatedImage.name;
       }
     }
 
