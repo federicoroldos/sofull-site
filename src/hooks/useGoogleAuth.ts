@@ -381,10 +381,11 @@ export const useGoogleAuth = () => {
           }
           return accessTokenRef.current;
         }
-        applyAccessToken(
-          response.access_token,
-          Number.isFinite(response.expires_in) ? response.expires_in * 1000 : null
-        );
+        const expiresInMs =
+          typeof response.expires_in === 'number' && Number.isFinite(response.expires_in)
+            ? response.expires_in * 1000
+            : null;
+        applyAccessToken(response.access_token, expiresInMs);
         return response.access_token;
       })();
       refreshPromiseRef.current = request;
