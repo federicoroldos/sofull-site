@@ -50,25 +50,25 @@ const CATEGORY_PLACEHOLDERS: Record<
   { name: string; nameEnglish: string; brand: string; description: string }
 > = {
   ramyeon: {
-    name: 'ì‹ ë¼ë©´',
+    name: '신라면',
     nameEnglish: 'Shin Ramyeon',
     brand: 'Nongshim',
     description: 'Spicy, savory, chewy noodles.'
   },
   snack: {
-    name: 'ì´ˆì½”íŒŒì´',
+    name: '초코파이',
     nameEnglish: 'Choco Pie',
     brand: 'Orion',
     description: 'Sweet, soft, chocolate-coated treat.'
   },
   drink: {
-    name: 'ë°”ë‚˜ë‚˜ìš°ìœ ',
+    name: '바나나우유',
     nameEnglish: 'Banana Milk',
     brand: 'Binggrae',
     description: 'Sweet, creamy, banana-flavored milk.'
   },
   ice_cream: {
-    name: 'ë©”ë¡œë‚˜',
+    name: '메로나',
     nameEnglish: 'Melona',
     brand: 'Binggrae',
     description: 'Melon-flavored, creamy ice bar.'
