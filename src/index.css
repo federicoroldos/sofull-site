@@ -155,11 +155,6 @@ h1 {
   transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
 
-.button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
-}
-
 .button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -182,12 +177,13 @@ h1 {
   height: 42px;
   border: 2px solid var(--outline);
   border-radius: 999px;
-  background: white;
+  background: var(--paper-accent);
   color: var(--outline);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
   transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
@@ -197,10 +193,19 @@ h1 {
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .refresh-button:hover {
-    transform: rotate(-12deg);
-    background: var(--paper);
+  .button:hover {
+    transform: translateY(-1px);
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  }
+
+  .refresh-button:hover {
+    transform: rotate(-10deg) translateY(-1px);
+    background: #fffdf8;
+    box-shadow: 0 10px 18px rgba(0, 0, 0, 0.14);
+  }
+
+  .app__footer a:hover {
+    color: var(--accent-dark);
   }
 }
 
@@ -556,9 +561,6 @@ textarea {
   text-decoration: underline;
 }
 
-.app__footer a:hover {
-  color: var(--accent-dark);
-}
 
 .modal__header {
   display: flex;
