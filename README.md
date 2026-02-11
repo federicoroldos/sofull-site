@@ -98,6 +98,23 @@ cp .env.example .env
 npm run dev
 ```
 
+## Android
+
+See `ANDROID_SETUP.md` for full Android + Google Sign-In setup steps. Quick start:
+
+```bash
+npm install
+npm run android:build
+npm run android:open
+```
+
+For live reload on device/emulator:
+
+```bash
+npm run android:dev
+npx cap run android -l --external
+```
+
 ## Google OAuth + Drive Configuration
 
 1. Create a Firebase project.

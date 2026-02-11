@@ -1,4 +1,6 @@
 ﻿import { useCallback, useEffect, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { SocialLogin } from '@capgo/capacitor-social-login';
 import { firebaseApp } from '../firebase';
 import {
   browserLocalPersistence,
@@ -6,14 +8,19 @@ import {
   GoogleAuthProvider,
   onAuthStateChanged,
   setPersistence,
+  signInWithCredential,
   signInWithPopup,
   signOut
 } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 
 const provider = new GoogleAuthProvider();
-provider.addScope('https://www.googleapis.com/auth/drive.appdata');
-provider.addScope('https://www.googleapis.com/auth/drive.file');
+const DRIVE_SCOPES = [
+  'https://www.googleapis.com/auth/drive.appdata',
+  'https://www.googleapis.com/auth/drive.file'
+];
+const GOOGLE_SCOPES = ['profile', 'email', ...DRIVE_SCOPES];
+DRIVE_SCOPES.forEach((scope) => provider.addScope(scope));
 provider.setCustomParameters({ prompt: 'select_account consent' });
 
 const ACCESS_TOKEN_KEY = 'sofull-google-access-token';
@@ -29,6 +36,33 @@ const SESSION_DURATION_DAYS = (() => {
 })();
 const SESSION_DURATION_MS = SESSION_DURATION_DAYS * 24 * 60 * 60 * 1000;
 const AUTH_EMAIL_ENDPOINT = import.meta.env.VITE_AUTH_EMAIL_ENDPOINT;
+const NATIVE_GOOGLE_WEB_CLIENT_ID = import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID;
+const IS_NATIVE = Capacitor.isNativePlatform();
+let socialLoginInitialized = false;
+
+const ensureNativeSocialLogin = async () => {
+  if (!IS_NATIVE || socialLoginInitialized) return;
+  if (!NATIVE_GOOGLE_WEB_CLIENT_ID) {
+    throw new Error('Missing VITE_GOOGLE_WEB_CLIENT_ID for native Google Sign-In.');
+  }
+  await SocialLogin.initialize({
+    google: {
+      webClientId: NATIVE_GOOGLE_WEB_CLIENT_ID,
+      mode: 'online'
+    }
+  });
+  socialLoginInitialized = true;
+};
+
+const tryNativeLogout = async () => {
+  if (!IS_NATIVE) return;
+  try {
+    await ensureNativeSocialLogin();
+    await SocialLogin.logout({ provider: 'google' });
+  } catch {
+    // Ignore native logout failures.
+  }
+};
 
 const parseStoredToken = (raw: string | null) => {
   if (!raw) return null;
@@ -212,6 +246,7 @@ export const useGoogleAuth = () => {
   const forceSessionLogout = useCallback(async (reason?: string) => {
     setLoading(true);
     try {
+      await tryNativeLogout();
       await signOut(auth);
     } catch {
       // Ignore sign-out failures; we'll still clear local state.
@@ -320,6 +355,42 @@ export const useGoogleAuth = () => {
     setLoading(true);
     setError(null);
     try {
+      if (IS_NATIVE) {
+        await ensureNativeSocialLogin();
+        const response = await SocialLogin.login({
+          provider: 'google',
+          options: {
+            scopes: GOOGLE_SCOPES
+          }
+        });
+        if (response.provider !== 'google') {
+          throw new Error('Google sign-in failed.');
+        }
+        const result = response.result;
+        if (result.responseType !== 'online') {
+          throw new Error('Google sign-in did not return an access token.');
+        }
+        const accessToken = result.accessToken?.token ?? null;
+        const idToken = result.idToken ?? null;
+        if (!idToken) {
+          throw new Error('Google sign-in did not return an ID token.');
+        }
+        const credential = GoogleAuthProvider.credential(idToken, accessToken || undefined);
+        const authResult = await signInWithCredential(auth, credential);
+        if (accessToken) {
+          setAccessToken(accessToken);
+          setAccessTokenExpiresAt(Date.now() + ACCESS_TOKEN_TTL_MS);
+          persistToken(accessToken);
+          setTokenExpired(false);
+        } else {
+          setAccessToken(null);
+          setAccessTokenExpiresAt(null);
+          persistToken(null);
+        }
+        updateSessionStart(Date.now());
+        void notifyAuthEmail(authResult.user);
+        return;
+      }
       await setPersistence(auth, browserLocalPersistence);
       const result = await signInWithPopup(auth, provider);
       const credential = GoogleAuthProvider.credentialFromResult(result);
@@ -346,6 +417,7 @@ export const useGoogleAuth = () => {
   const signOutUser = async () => {
     setLoading(true);
     try {
+      await tryNativeLogout();
       await signOut(auth);
       setAccessToken(null);
       setAccessTokenExpiresAt(null);
