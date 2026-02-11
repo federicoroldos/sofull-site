@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">So Full!</string>
-    <string name="title_activity_main">So Full!</string>
+    <string name="app_name">배불러! (So Full!)</string>
+    <string name="title_activity_main">배불러! (So Full!)</string>
     <string name="package_name">com.sofull.site</string>
     <string name="custom_url_scheme">com.sofull.site</string>
 </resources>

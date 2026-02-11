@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.sofull.site',
-  appName: 'So Full!',
+  appName: '배불러! (So Full!)',
   webDir: 'dist',
   server: {
     cleartext: true
