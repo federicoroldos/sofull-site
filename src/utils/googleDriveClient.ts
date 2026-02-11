@@ -247,3 +247,30 @@ export const deleteDriveFile = async (token: string, fileId: string) => {
     throw new Error(`Error deleting Drive file: ${errorText || response.statusText}`);
   }
 };
+
+export const updateDriveFileName = async (token: string, fileId: string, name: string) => {
+  const normalizedName = name.trim();
+  if (!normalizedName) {
+    throw new Error('File name is required.');
+  }
+
+  const response = await fetch(`${FILES_URL}/${encodeURIComponent(fileId)}?fields=id,name,mimeType`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ name: normalizedName })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Error updating Drive file: ${errorText || response.statusText}`);
+  }
+
+  const data = (await response.json()) as Partial<DriveFileMetadata>;
+  if (!data.id || !data.name || !data.mimeType) {
+    throw new Error('Invalid Drive update response.');
+  }
+  return data as DriveFileMetadata;
+};
