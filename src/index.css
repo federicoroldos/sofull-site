@@ -196,10 +196,12 @@ h1 {
   height: 20px;
 }
 
-.refresh-button:hover {
-  transform: rotate(-12deg);
-  background: var(--paper);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+@media (hover: hover) and (pointer: fine) {
+  .refresh-button:hover {
+    transform: rotate(-12deg);
+    background: var(--paper);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  }
 }
 
 .refresh-button:focus-visible {
