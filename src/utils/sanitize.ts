@@ -1,6 +1,10 @@
-﻿import type { EntryCategory, FormFactor, SofullEntry, SpicinessLevel } from '../types/sofull';
-
-import type { IceCreamFormFactor } from '../types/sofull';
+import type {
+  EntryCategory,
+  FormFactor,
+  IceCreamFormFactor,
+  SofullEntry,
+  SpicinessLevel
+} from '../types/sofull';
 
 const MAX_NAME = 80;
 const MAX_BRAND = 60;
@@ -179,5 +183,3 @@ export const sanitizeEntries = (entries: unknown) => {
     .filter((entry): entry is SofullEntry => Boolean(entry));
   return sanitized;
 };
-
-
