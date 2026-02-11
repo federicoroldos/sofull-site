@@ -44,11 +44,19 @@
         padding: 48px 24px 56px;
       }
 
-      .page__top {
+      .page__header {
         display: flex;
-        align-items: center;
-        justify-content: flex-start;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
         margin-bottom: 10px;
+      }
+
+      .page__title {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
       }
 
       .back-button {
@@ -92,7 +100,7 @@
       h1 {
         font-family: 'Nanum Pen Script', cursive;
         font-size: clamp(36px, 5vw, 64px);
-        margin: 0 0 12px;
+        margin: 0;
       }
 
       h2 {
@@ -124,6 +132,12 @@
         text-decoration: underline;
       }
 
+      @media (max-width: 720px) {
+        .page__header {
+          align-items: flex-start;
+        }
+      }
+
       @media (hover: hover) and (pointer: fine) {
         .back-button:hover {
           background: #fffdf8;
@@ -133,11 +147,13 @@
   </head>
   <body>
     <main class="page">
-      <div class="page__top">
+      <div class="page__header">
+        <div class="page__title">
+          <p class="eyebrow"><a class="eyebrow-link" href="/">So Full!</a></p>
+          <h1>Terms of Service</h1>
+        </div>
         <a class="back-button" href="/">← Back</a>
       </div>
-      <p class="eyebrow"><a class="eyebrow-link" href="/">So Full!</a></p>
-      <h1>Terms of Service</h1>
       <p class="meta">Effective date: February 11, 2026</p>
 
       <div class="card">
