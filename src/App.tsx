@@ -132,7 +132,7 @@ const App = () => {
     accessToken,
     tokenExpired,
     clearTokenExpired,
-    markTokenExpired,
+    expireAccessToken,
     loading: authLoading,
     error: authError,
     signIn,
@@ -155,11 +155,14 @@ const App = () => {
   const imageFolderIdRef = useRef<string | null>(null);
 
   const isLoggedIn = Boolean(user);
-  const handleDriveAuthError = (error: unknown) => {
-    if (error instanceof DriveAuthError) {
-      markTokenExpired();
-    }
-  };
+  const handleDriveAuthError = useCallback(
+    (error: unknown) => {
+      if (error instanceof DriveAuthError) {
+        expireAccessToken();
+      }
+    },
+    [expireAccessToken]
+  );
 
   const withDriveAuthRetry: <T>(
     run: (token: string) => Promise<T>,
@@ -599,7 +602,7 @@ const App = () => {
 
     let cancelled = false;
     const loadImage = async (fileId: string) => {
-      const request = fetchFileBlob(accessToken, fileId)
+      const request = withDriveAuthRetry((token) => fetchFileBlob(token, fileId))
         .then((blob) => {
           const objectUrl = URL.createObjectURL(blob);
           if (cancelled) {
@@ -629,7 +632,7 @@ const App = () => {
     return () => {
       cancelled = true;
     };
-  }, [entries, accessToken]);
+  }, [entries, accessToken, withDriveAuthRetry, handleDriveAuthError]);
 
   return (
     <div className="app">
@@ -769,7 +772,7 @@ const App = () => {
             <div className="modal__header">
               <h2 id="session-expired-title">Session expired</h2>
             </div>
-            <p>Your Google access token expired. Refresh the page and sign in again to continue syncing.</p>
+            <p>Your Google access token expired. Sign in again to continue syncing.</p>
             <div className="modal__footer">
               <button className="button button--ghost" onClick={clearTokenExpired}>
                 Dismiss
@@ -783,7 +786,7 @@ const App = () => {
                 }}
                 disabled={authLoading}
               >
-                Refresh & sign in
+                Sign in again
               </button>
             </div>
           </div>

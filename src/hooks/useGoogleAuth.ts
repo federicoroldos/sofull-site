@@ -31,6 +31,12 @@ const ACCESS_TOKEN_LIFETIME_MS = (() => {
   if (Number.isFinite(raw) && raw > 0) return raw;
   return DEFAULT_ACCESS_TOKEN_LIFETIME_MS;
 })();
+const DEFAULT_ACCESS_TOKEN_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+const ACCESS_TOKEN_REFRESH_INTERVAL_MS = (() => {
+  const raw = Number(import.meta.env.VITE_ACCESS_TOKEN_REFRESH_INTERVAL_MS);
+  if (Number.isFinite(raw) && raw > 0) return raw;
+  return DEFAULT_ACCESS_TOKEN_REFRESH_INTERVAL_MS;
+})();
 const ACCESS_TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
 const ACCESS_TOKEN_EXPIRY_ENFORCED = import.meta.env.VITE_ENFORCE_ACCESS_TOKEN_EXPIRY === 'true';
 const SESSION_START_KEY = 'sofull-google-session-start';
@@ -515,6 +521,17 @@ export const useGoogleAuth = () => {
 
   useEffect(() => {
     if (!user || IS_NATIVE) return;
+    if (!Number.isFinite(ACCESS_TOKEN_REFRESH_INTERVAL_MS) || ACCESS_TOKEN_REFRESH_INTERVAL_MS <= 0) {
+      return;
+    }
+    const interval = window.setInterval(() => {
+      void refreshAccessToken({ interactive: false, force: true });
+    }, ACCESS_TOKEN_REFRESH_INTERVAL_MS);
+    return () => window.clearInterval(interval);
+  }, [user, refreshAccessToken]);
+
+  useEffect(() => {
+    if (!user || IS_NATIVE) return;
     if (!accessTokenExpiresAt) return;
     const now = Date.now();
     const refreshAt = Math.max(accessTokenExpiresAt - ACCESS_TOKEN_REFRESH_BUFFER_MS, now + 30_000);
@@ -665,6 +682,7 @@ export const useGoogleAuth = () => {
     accessTokenExpiresAt,
     tokenExpired,
     clearTokenExpired,
+    expireAccessToken: expireToken,
     markTokenExpired,
     loading,
     error,
