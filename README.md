@@ -3,7 +3,9 @@
 A personal food & drink log for ramyeon, snacks, drinks, and ice cream.
 Try it out [here](https://sofull.site).
 
-## What It Does
+Release: 1.0 (public)
+
+## Highlights
 
 - Log entries with name, brand, category, rating, and category-specific details.
 - Track ramyeon form factor (packet/cup), ice cream form factor (bar/cream), and spiciness levels.
@@ -11,43 +13,56 @@ Try it out [here](https://sofull.site).
 - Sort by latest, best rated, or alphabetical (Hangul/English).
 - Search by name or brand.
 - Edit or delete entries with confirmation.
+- Email notifications for first sign-in and subsequent logins.
 
-## How It Works
+## How Data Works
 
-This is a fully client-side web app. Google Sign-In identifies the user, and a JSON file is stored
-in Google Drive `appDataFolder`. The file is created on first login and updated on every change.
-If you upload an image, it is stored in your Google Drive in a `배불러! (So Full!)/images` folder
-and referenced by its Drive file ID. If you use an image URL, it must be `https://`.
-When signed out, the app shows a demo entry to preview the layout.
-Logins persist on the same device/browser profile for up to 6 months by default.
+- The app is fully client-side. Google Sign-In identifies the user.
+- A JSON file is stored in Google Drive `appDataFolder` using the `drive.appdata` scope.
+- Uploaded images are stored in your Google Drive in `배불러! (So Full!)/images` using the `drive.file` scope.
+- When signed out, the app shows demo entries to preview the layout.
+- Login sessions are stored locally (browser local storage) and default to 180 days.
 
 ## Email Notifications
 
-- On first sign-up, a single signup confirmation email is sent.
-- Each subsequent login sends one login notification email.
-- Sign-up does not also send a login email.
-- Emails are branded to match the site and include privacy/terms links.
-- Login emails include sign-in time, device name/model (when available), device/browser, and approximate city/country, plus a Google security callout.
+The app calls a serverless endpoint (`api/auth-email`) to send:
 
-Environment variables for email delivery:
+- A welcome email on first sign-in.
+- A login notification email on subsequent sign-ins.
+
+Login emails include sign-in time, device name/model when available, device/browser, and approximate city/country.
+
+## Architecture
+
+- Frontend: Vite + React, hosted as static assets (GitHub Pages).
+- Auth: Firebase Authentication (Google provider).
+- Storage: Google Drive AppData + Drive folders.
+- Email API: Serverless endpoint (Vercel) that verifies Firebase ID tokens and sends via Brevo.
+
+## Environment Variables
+
+Client (Vite) variables:
+- `VITE_FIREBASE_API_KEY`
+- `VITE_FIREBASE_AUTH_DOMAIN`
+- `VITE_FIREBASE_PROJECT_ID`
+- `VITE_FIREBASE_APP_ID`
+- `VITE_GOOGLE_WEB_CLIENT_ID` (required for native sign-in)
+- `VITE_AUTH_EMAIL_ENDPOINT` (email API URL)
+- `VITE_SESSION_DURATION_DAYS` (optional, defaults to 180)
+- `VITE_ACCESS_TOKEN_TTL_MS` (optional)
+- `VITE_ENFORCE_ACCESS_TOKEN_EXPIRY` (optional)
+
+Server (email API) variables:
 - `BREVO_API_KEY`, `BREVO_SENDER_EMAIL`, `BREVO_SENDER_NAME`
-- `FIREBASE_SERVICE_ACCOUNT_JSON` (Firebase Admin service account JSON string)
-- `PUBLIC_SITE_URL` (used for links/logos in email templates)
-- `SUPPORT_EMAIL` (used in email footer)
-- `EMAIL_LOGO_URL` (optional override for the header logo image; use a PNG/JPG/GIF for best email client support)
+- `FIREBASE_SERVICE_ACCOUNT_JSON`
+- `PUBLIC_SITE_URL` (for links/logos in emails)
+- `SUPPORT_EMAIL`
+- `EMAIL_LOGO_URL` (optional)
 - `LOGIN_EMAIL_COOLDOWN_SECONDS` (optional throttling)
-- `CORS_ORIGINS` (comma-separated allowlist for the email API, ex: `https://sofull.site`)
-- `DEV_CORS_ORIGINS` (optional dev allowlist, ex: `http://localhost:5173`)
-- `ALLOW_LOCALHOST_ORIGIN` (set to `true` to include common localhost origins)
+- `CORS_ORIGINS`, `DEV_CORS_ORIGINS`, `ALLOW_LOCALHOST_ORIGIN`
 - `AUTH_EMAIL_RATE_LIMIT_MAX`, `AUTH_EMAIL_RATE_LIMIT_WINDOW_SECONDS`
 
-Support inbox note:
-- If you use Cloudflare Email Routing to forward `support@sofull.site`, you still set `SUPPORT_EMAIL` and `BREVO_SENDER_EMAIL` to that address. Cloudflare handles receiving; Brevo handles sending. If Cloudflare asks for an SPF record, merge it with Brevo's SPF into a single SPF record.
-
 ## Deployment (GitHub Pages + Vercel API)
-
-The app is static and can be hosted on GitHub Pages, while the email API
-(`api/auth-email`) must be hosted on a serverless provider (Vercel).
 
 Frontend (GitHub Pages):
 - Build in GitHub Actions with `VITE_AUTH_EMAIL_ENDPOINT` pointing to the Vercel API URL.
@@ -56,28 +71,6 @@ Frontend (GitHub Pages):
 Email API (Vercel):
 - Set `CORS_ORIGINS=https://sofull.site` (and optionally the Vercel domain).
 - Keep all email secrets in Vercel Environment Variables only.
-
-Security notes:
-- Server-side secrets (Brevo + Firebase Admin) must live only in Vercel Environment Variables.
-- Prefer Vercel "Sensitive" environment variables for secrets so values are write-only after creation.
-- Never commit `.env`, service account JSON files, or private keys to the repository.
-- Client-side env vars must use the `VITE_` prefix and must never contain secrets.
-- The email API defaults to 5 requests per 10 minutes per IP unless overridden.
-
-Secret rotation checklist (if a leak is suspected):
-1. Revoke and recreate the Brevo API key, then update the Vercel environment variable.
-2. Rotate the Firebase Admin service account key and update `FIREBASE_SERVICE_ACCOUNT_JSON` in Vercel.
-3. Review recent deployments, Vercel logs, and Git history for exposure.
-4. Redeploy to ensure new secrets are in use.
-5. If needed, invalidate user sessions in Firebase Auth.
-
-## Idea Evolution
-
-This started as a tiny ramyeon-only list to remember favorite packs and cups. Once it was useful
-for rankings and rebuys, it expanded to cover snacks, drinks, and ice cream so the same workflow
-could capture the full convenience-store haul. Ratings and attribute tags made comparisons easier,
-Drive-based storage kept the data private and portable, and image support turned the log into a
-memory of what each item looked like.
 
 ## Local Setup
 
@@ -136,9 +129,16 @@ npx cap run android -l --external
 6. Optional session duration:
    - `VITE_SESSION_DURATION_DAYS` (defaults to `180`)
 
+## Security & Privacy
+
+- Security practices: see `SECURITY.md`.
+- Privacy Policy: `public/privacy.html`.
+- Terms of Service: `public/terms.html`.
+
 ## Notes
 
-- If you refresh and Drive actions stop working, sign out and sign back in to refresh the access token.
-- For security, image URLs must use `https://` (non-HTTPS URLs are rejected).
+- If Drive actions stop working, sign out and sign back in to refresh the access token.
+- Image URLs must use `https://` (non-HTTPS URLs are rejected).
 - Persistent login is device/browser-specific; a new device or profile will require a fresh sign-in.
 - CI runs `npm run scan:secrets` to block accidental secret commits.
+

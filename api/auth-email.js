@@ -259,18 +259,10 @@ const normalizeDeviceModel = (value) => {
   return trimmed.replace(/\s+/g, ' ');
 };
 
-const toPossessive = (value) => {
-  const trimmed = String(value ?? '').trim();
-  if (!trimmed) return null;
-  return /s$/i.test(trimmed) ? `${trimmed}'` : `${trimmed}'s`;
-};
-
-const formatDeviceLabel = ({ displayName, deviceModel, os, deviceType, deviceFallback }) => {
+const formatDeviceLabel = ({ deviceModel, os, deviceType, deviceFallback }) => {
   const base = [os, deviceType].filter(Boolean).join(' ');
   const normalizedModel = normalizeDeviceModel(deviceModel);
-  const owner = toPossessive(displayName);
-  const namedModel =
-    normalizedModel && owner ? `${owner} ${normalizedModel}` : normalizedModel;
+  const namedModel = normalizedModel;
 
   if (namedModel && base) return `${namedModel} (${base})`;
   if (namedModel) return namedModel;
@@ -1046,7 +1038,6 @@ export default async function handler(req, res) {
 
     const requestMeta = getRequestMeta(req);
     const deviceLabel = formatDeviceLabel({
-      displayName,
       deviceModel: requestMeta.deviceModel,
       os: requestMeta.os,
       deviceType: requestMeta.deviceType,
