@@ -31,6 +31,7 @@ docs
 *.crt
 *.jks
 *.keystore
+*.keystore.b64
 keystore.properties
 firebase-adminsdk*.json
 service-account*.json

@@ -127,6 +127,43 @@ Release AAB:
 
 For release builds, configure signing in `android/app/build.gradle` (keystore, key alias, passwords).
 
+## CI Signing (Stable SHA-1)
+
+GitHub Actions runners generate a new debug keystore each run, which changes the SHA-1 and breaks
+Google Sign-In. To keep a stable SHA-1, sign CI builds with your own keystore.
+
+### 1) Create a keystore (one time)
+
+```bash
+keytool -genkeypair -v -keystore sofull-ci.keystore -alias sofull -keyalg RSA -keysize 2048 -validity 10000
+```
+
+### 2) Base64-encode it for GitHub Secrets
+
+Windows (PowerShell):
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("sofull-ci.keystore")) | Set-Content sofull-ci.keystore.b64
+```
+
+macOS/Linux:
+
+```bash
+base64 -w 0 sofull-ci.keystore > sofull-ci.keystore.b64
+```
+
+### 3) Add GitHub Secrets
+
+Add these repo secrets:
+
+- `ANDROID_KEYSTORE_BASE64` = contents of `sofull-ci.keystore.b64`
+- `ANDROID_KEYSTORE_PASSWORD` = keystore password
+- `ANDROID_KEY_ALIAS` = alias (ex: `sofull`)
+- `ANDROID_KEY_PASSWORD` = key password
+
+The workflow will decode the keystore and sign the APK with it. Use the keystore SHA-1 in your
+Android OAuth Client.
+
 ## Icons
 
 The Android icons are generated from the web favicon:

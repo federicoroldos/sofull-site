@@ -1,5 +1,9 @@
 apply plugin: 'com.android.application'
 
+def hasCiSigning = System.getenv("ANDROID_KEYSTORE_PASSWORD") &&
+        System.getenv("ANDROID_KEY_ALIAS") &&
+        System.getenv("ANDROID_KEY_PASSWORD")
+
 android {
     namespace = "com.sofull.site"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,10 +20,32 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (hasCiSigning) {
+            ci {
+                def keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+                if (keystorePath == null || keystorePath.isEmpty()) {
+                    keystorePath = "ci-keystore.jks"
+                }
+                storeFile file(keystorePath)
+                storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
+        debug {
+            if (hasCiSigning) {
+                signingConfig signingConfigs.ci
+            }
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (hasCiSigning) {
+                signingConfig signingConfigs.ci
+            }
         }
     }
 }
