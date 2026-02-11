@@ -6,17 +6,25 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "android:dev": "vite --host",
+    "android:build": "tsc -b && vite build --base ./ && npx cap sync android",
+    "android:open": "npx cap open android",
     "lint": "eslint .",
     "scan:secrets": "node scripts/scan-secrets.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/android": "^8.0.2",
+    "@capacitor/cli": "^8.0.2",
+    "@capacitor/core": "^8.0.2",
+    "@capgo/capacitor-social-login": "^8.2.24",
     "firebase": "^12.8.0",
     "firebase-admin": "^13.6.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@eslint/js": "^9.39.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",
