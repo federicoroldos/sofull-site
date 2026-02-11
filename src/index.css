@@ -177,6 +177,47 @@ h1 {
   white-space: nowrap;
 }
 
+.refresh-button {
+  width: 42px;
+  height: 42px;
+  border: 2px solid var(--outline);
+  border-radius: 999px;
+  background: white;
+  color: var(--outline);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.refresh-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+.refresh-button:hover {
+  transform: rotate(-12deg);
+  background: var(--paper);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+}
+
+.refresh-button:focus-visible {
+  outline: 3px solid rgba(31, 42, 46, 0.2);
+  outline-offset: 2px;
+}
+
+.refresh-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.refresh-button--loading svg {
+  animation: spin 0.9s linear infinite;
+}
+
 .text-button {
   border: none;
   background: none;
@@ -603,6 +644,12 @@ textarea {
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
   border: 0;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 720px) {

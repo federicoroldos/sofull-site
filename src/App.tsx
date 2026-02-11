@@ -156,6 +156,8 @@ const App = () => {
   const collatorEn = useMemo(() => new Intl.Collator('en', { sensitivity: 'base' }), []);
   const collatorKo = useMemo(() => new Intl.Collator('ko', { sensitivity: 'base' }), []);
   const attributeSortOption = ATTRIBUTE_SORT_BY_CATEGORY[categoryFilter];
+  const isSyncBusy = syncState === 'loading' || syncState === 'saving';
+  const isRefreshing = syncState === 'loading';
   const handleCategoryChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const nextCategory = event.target.value as CategoryFilter;
     setCategoryFilter(nextCategory);
@@ -239,6 +241,28 @@ const App = () => {
   const closeModal = () => {
     setModalOpen(false);
     setEditingEntry(null);
+  };
+
+  const refreshList = async () => {
+    if (!accessToken) return;
+    setSyncState('loading');
+    setSyncMessage('Refreshing from Google Drive...');
+    try {
+      const fileId = await ensureAppDataFile(accessToken);
+      setDriveFileId(fileId);
+      const content = await downloadFromAppData(accessToken, fileId);
+      const data = parseDataFile(content);
+      setEntries(data.entries || []);
+      setSyncState('idle');
+      setSyncMessage(`Refreshed ${data.entries.length} entries.`);
+      if (!content || content.trim().length === 0) {
+        await uploadToAppData(accessToken, fileId, JSON.stringify(DEFAULT_DATA, null, 2));
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Drive load failed.';
+      setSyncState('error');
+      setSyncMessage(message);
+    }
   };
 
   const saveToDrive = async (nextEntries: SofullEntry[]) => {
@@ -559,6 +583,31 @@ const App = () => {
         <div className="toolbar__left">
           <button className="button" onClick={openCreate} disabled={!isLoggedIn}>
             Add item
+          </button>
+          <button
+            type="button"
+            className={`refresh-button${isRefreshing ? ' refresh-button--loading' : ''}`}
+            onClick={() => void refreshList()}
+            disabled={!isLoggedIn || authLoading || isSyncBusy}
+            aria-label="Refresh list"
+            title="Refresh list"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M3 12a9 9 0 0 1 15.54-6.36M21 12a9 9 0 0 1-15.54 6.36"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeWidth="2.2"
+              />
+              <path
+                d="M18 3.5v4.5h-4.5M6 20.5v-4.5h4.5"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeWidth="2.2"
+              />
+            </svg>
           </button>
           <div className="field field--search">
             <label htmlFor="search" className="sr-only">
