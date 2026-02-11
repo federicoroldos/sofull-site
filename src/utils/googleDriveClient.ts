@@ -4,6 +4,21 @@ const FILES_URL = 'https://www.googleapis.com/drive/v3/files';
 const BACKUP_FILENAME = 'sofull.json';
 const LEGACY_BACKUP_FILENAME = 'ramyeon-dictionary.json';
 
+export class DriveAuthError extends Error {
+  constructor(message = 'Google Drive access expired. Please sign in again.') {
+    super(message);
+    this.name = 'DriveAuthError';
+  }
+}
+
+const handleDriveError = async (response: Response, fallback: string) => {
+  const errorText = await response.text();
+  if (response.status === 401) {
+    throw new DriveAuthError();
+  }
+  throw new Error(`${fallback}: ${errorText || response.statusText}`);
+};
+
 const escapeQueryValue = (value: string) => value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 const buildAppDataQuery = (name: string) =>
   `name = '${escapeQueryValue(name)}' and trashed = false and 'appDataFolder' in parents`;
@@ -23,8 +38,7 @@ const createAppDataFile = async (token: string, name: string) => {
   });
 
   if (!createResponse.ok) {
-    const errorText = await createResponse.text();
-    throw new Error(`Error creating appData file: ${errorText || createResponse.statusText}`);
+    await handleDriveError(createResponse, 'Error creating appData file');
   }
 
   const data = (await createResponse.json()) as { id?: string };
@@ -44,8 +58,7 @@ const listAppDataFileId = async (token: string, name: string) => {
   });
 
   if (!listResponse.ok) {
-    const errorText = await listResponse.text();
-    throw new Error(`Error listing appData files: ${errorText || listResponse.statusText}`);
+    await handleDriveError(listResponse, 'Error listing appData files');
   }
 
   const listData = (await listResponse.json()) as { files?: Array<{ id: string }> };
@@ -87,8 +100,7 @@ export async function uploadToAppData(token: string, fileId: string, content: st
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Error uploading to Drive: ${errorText || response.statusText}`);
+    await handleDriveError(response, 'Error uploading to Drive');
   }
 }
 
@@ -102,8 +114,7 @@ export async function downloadFromAppData(token: string, fileId: string) {
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Error downloading from Drive: ${errorText || response.statusText}`);
+    await handleDriveError(response, 'Error downloading from Drive');
   }
 
   return response.text();
@@ -131,8 +142,7 @@ export const ensureFolder = async (token: string, name: string, parentId?: strin
   });
 
   if (!listResponse.ok) {
-    const errorText = await listResponse.text();
-    throw new Error(`Error listing folders: ${errorText || listResponse.statusText}`);
+    await handleDriveError(listResponse, 'Error listing folders');
   }
 
   const listData = (await listResponse.json()) as { files?: Array<{ id: string }> };
@@ -154,8 +164,7 @@ export const ensureFolder = async (token: string, name: string, parentId?: strin
   });
 
   if (!createResponse.ok) {
-    const errorText = await createResponse.text();
-    throw new Error(`Error creating folder: ${errorText || createResponse.statusText}`);
+    await handleDriveError(createResponse, 'Error creating folder');
   }
 
   const createdFolder = (await createResponse.json()) as { id?: string };
@@ -205,8 +214,7 @@ export const uploadFileMultipart = async (
   );
 
   if (!uploadResponse.ok) {
-    const errorText = await uploadResponse.text();
-    throw new Error(`Error uploading image: ${errorText || uploadResponse.statusText}`);
+    await handleDriveError(uploadResponse, 'Error uploading image');
   }
 
   const data = (await uploadResponse.json()) as Partial<DriveFileMetadata>;
@@ -226,8 +234,7 @@ export const fetchFileBlob = async (token: string, fileId: string) => {
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Error downloading Drive image: ${errorText || response.statusText}`);
+    await handleDriveError(response, 'Error downloading Drive image');
   }
 
   return response.blob();
@@ -243,8 +250,7 @@ export const deleteDriveFile = async (token: string, fileId: string) => {
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Error deleting Drive file: ${errorText || response.statusText}`);
+    await handleDriveError(response, 'Error deleting Drive file');
   }
 };
 
@@ -264,8 +270,7 @@ export const updateDriveFileName = async (token: string, fileId: string, name: s
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Error updating Drive file: ${errorText || response.statusText}`);
+    await handleDriveError(response, 'Error updating Drive file');
   }
 
   const data = (await response.json()) as Partial<DriveFileMetadata>;
