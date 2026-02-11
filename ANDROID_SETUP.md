@@ -10,7 +10,7 @@ This project ships an Android app via Capacitor (WebView wrapper) so the same Re
 
 ## App ID / Package Name
 
-- Default: `site.sofull.app`
+- Default: `com.sofull.site`
 - If you change it, update `capacitor.config.ts` and recreate the Android OAuth client in Google Cloud.
 
 ## Environment Variables
@@ -45,7 +45,7 @@ If you host `api/auth-email` yourself, allow Capacitor origins in CORS (`http://
 ### B) Android client ID
 
 - Create **OAuth Client ID ? Android**.
-- Package name: `site.sofull.app` (or your custom appId).
+- Package name: `com.sofull.site` (or your custom appId).
 - SHA-1 fingerprint:
 
 Debug keystore (Windows):

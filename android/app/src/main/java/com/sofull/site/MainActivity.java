@@ -1,4 +1,4 @@
-package site.sofull.app;
+package com.sofull.site;
 
 import android.content.Intent;
 import com.getcapacitor.BridgeActivity;
