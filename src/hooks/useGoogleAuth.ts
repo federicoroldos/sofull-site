@@ -146,12 +146,22 @@ const getGisTokenClient = async () => {
   return gisTokenClient;
 };
 
+type StoredTokenEntry = {
+  token: string;
+  storedAt: number;
+  expiresAt?: number | null;
+};
+
 const parseStoredToken = (raw: string | null) => {
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as { token: string; storedAt: number };
+    const parsed = JSON.parse(raw) as Partial<StoredTokenEntry>;
     if (!parsed?.token || typeof parsed.storedAt !== 'number') return null;
-    return { token: parsed.token, storedAt: parsed.storedAt };
+    const expiresAt =
+      typeof parsed.expiresAt === 'number' && Number.isFinite(parsed.expiresAt) && parsed.expiresAt > 0
+        ? parsed.expiresAt
+        : null;
+    return { token: parsed.token, storedAt: parsed.storedAt, expiresAt };
   } catch {
     return null;
   }
@@ -159,7 +169,7 @@ const parseStoredToken = (raw: string | null) => {
 
 const readTokenEntryFromKey = (key: string) => parseStoredToken(localStorage.getItem(key));
 
-const persistTokenEntry = (entry: { token: string; storedAt: number } | null) => {
+const persistTokenEntry = (entry: StoredTokenEntry | null) => {
   try {
     if (!entry) {
       localStorage.removeItem(ACCESS_TOKEN_KEY);
@@ -185,8 +195,8 @@ const computeExpiresAt = (storedAt: number, expiresInMs?: number | null) => {
   return fallbackExpiresAt(storedAt);
 };
 
-const toTokenState = (entry: { token: string; storedAt: number }) => {
-  const expiresAt = fallbackExpiresAt(entry.storedAt);
+const toTokenState = (entry: StoredTokenEntry) => {
+  const expiresAt = entry.expiresAt ?? fallbackExpiresAt(entry.storedAt);
   if (ACCESS_TOKEN_EXPIRY_ENFORCED && expiresAt && Date.now() > expiresAt) {
     return { token: null, expiresAt: null };
   }
@@ -248,7 +258,8 @@ const persistToken = (token: string | null) => {
       persistTokenEntry(null);
       return;
     }
-    persistTokenEntry({ token, storedAt: Date.now() });
+    const storedAt = Date.now();
+    persistTokenEntry({ token, storedAt, expiresAt: fallbackExpiresAt(storedAt) });
   } catch {
     // Ignore storage write failures.
   }
@@ -346,9 +357,10 @@ export const useGoogleAuth = () => {
       return;
     }
     const storedAt = Date.now();
+    const expiresAt = computeExpiresAt(storedAt, expiresInMs);
     setAccessToken(token);
-    setAccessTokenExpiresAt(computeExpiresAt(storedAt, expiresInMs));
-    persistTokenEntry({ token, storedAt });
+    setAccessTokenExpiresAt(expiresAt);
+    persistTokenEntry({ token, storedAt, expiresAt });
     setTokenExpired(false);
   }, []);
 
@@ -630,7 +642,7 @@ export const useGoogleAuth = () => {
       const legacy = primary ? null : readTokenEntryFromKey(LEGACY_ACCESS_TOKEN_KEY);
       const entry = primary || legacy;
       if (!entry) return;
-      const expiresAt = fallbackExpiresAt(entry.storedAt);
+      const expiresAt = entry.expiresAt ?? fallbackExpiresAt(entry.storedAt);
       if (expiresAt && Date.now() >= expiresAt) {
         expireToken();
         persistTokenEntry(null);
