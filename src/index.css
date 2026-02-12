@@ -54,19 +54,27 @@ body {
   margin-bottom: 32px;
 }
 
+.app__title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 8px;
+}
+
 .app__eyebrow {
   font-family: 'Nanum Pen Script', cursive;
   font-size: 25px;
   letter-spacing: 0.5px;
   text-transform: none;
-  margin: 0 0 6px;
+  margin: 0;
   color: var(--muted);
 }
 
 h1 {
   font-family: 'Nanum Pen Script', cursive;
   font-size: clamp(60px, 5vw, 64px);
-  margin: 0 0 8px;
+  margin: 0;
 }
 
 .app__subtitle {

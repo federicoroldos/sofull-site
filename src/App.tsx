@@ -638,8 +638,10 @@ const App = () => {
     <div className="app">
       <header className="app__header">
         <div>
-          <p className="app__eyebrow">So Full!</p>
-          <h1>배불러!</h1>
+          <div className="app__title">
+            <h1>배불러!</h1>
+            <p className="app__eyebrow">So Full!</p>
+          </div>
           <p className="app__subtitle">
             Add and rate the ramyeon, snacks, drinks, and ice creams you've tried!
           </p>
