@@ -472,17 +472,25 @@ export const useGoogleAuth = () => {
       }
       if (!GOOGLE_WEB_CLIENT_ID) return current;
       const expiresAt = accessTokenExpiresAt;
+      const now = Date.now();
+      const isHardExpired = Boolean(expiresAt && now >= expiresAt);
       const shouldRefresh =
         options?.forceRefresh ||
         !current ||
-        (expiresAt && Date.now() >= expiresAt - ACCESS_TOKEN_REFRESH_BUFFER_MS);
+        tokenExpired ||
+        Boolean(expiresAt && now >= expiresAt - ACCESS_TOKEN_REFRESH_BUFFER_MS);
       if (!shouldRefresh) return current;
-      return await refreshAccessToken({
+      const refreshed = await refreshAccessToken({
         interactive: options?.interactive,
-        force: options?.forceRefresh
+        force: options?.forceRefresh || tokenExpired || isHardExpired
       });
+      if (!refreshed) return null;
+      if ((tokenExpired || isHardExpired || options?.forceRefresh) && refreshed === current) {
+        return null;
+      }
+      return refreshed;
     },
-    [accessTokenExpiresAt, refreshAccessToken]
+    [accessTokenExpiresAt, refreshAccessToken, tokenExpired]
   );
 
   const forceSessionLogout = useCallback(async (reason?: string) => {
