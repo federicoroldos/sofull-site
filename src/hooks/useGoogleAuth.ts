@@ -349,20 +349,36 @@ export const useGoogleAuth = () => {
     persistSessionStart(value);
   }, []);
 
-  const applyAccessToken = useCallback((token: string | null, expiresInMs?: number | null) => {
+  const applyAccessToken = useCallback(
+    (token: string | null, expiresInMs?: number | null, options?: { preserveIfSame?: boolean }) => {
     if (!token) {
       setAccessToken(null);
       setAccessTokenExpiresAt(null);
       persistToken(null);
       return;
     }
-    const storedAt = Date.now();
-    const expiresAt = computeExpiresAt(storedAt, expiresInMs);
+    const now = Date.now();
+    const isSameToken = options?.preserveIfSame && token === accessTokenRef.current;
+    const existingEntry = isSameToken ? readTokenEntryFromKey(ACCESS_TOKEN_KEY) ?? readTokenEntryFromKey(LEGACY_ACCESS_TOKEN_KEY) : null;
+    const storedAt = isSameToken && existingEntry?.storedAt ? existingEntry.storedAt : now;
+    const computedExpiresAt = computeExpiresAt(now, expiresInMs);
+    let expiresAt = computedExpiresAt;
+    if (isSameToken && existingEntry) {
+      const existingExpiresAt = existingEntry.expiresAt ?? fallbackExpiresAt(existingEntry.storedAt);
+      if (existingExpiresAt && expiresAt) {
+        expiresAt = Math.min(existingExpiresAt, expiresAt);
+      } else {
+        expiresAt = existingExpiresAt ?? expiresAt;
+      }
+    }
     setAccessToken(token);
     setAccessTokenExpiresAt(expiresAt);
     persistTokenEntry({ token, storedAt, expiresAt });
-    setTokenExpired(false);
-  }, []);
+    const isExpired = Boolean(expiresAt && now >= expiresAt);
+    setTokenExpired(isExpired);
+  },
+  []
+);
 
   const expireToken = () => {
     applyAccessToken(null);
@@ -455,7 +471,7 @@ export const useGoogleAuth = () => {
           typeof response.expires_in === 'number' && Number.isFinite(response.expires_in)
             ? response.expires_in * 1000
             : null;
-        applyAccessToken(response.access_token, expiresInMs);
+        applyAccessToken(response.access_token, expiresInMs, { preserveIfSame: true });
         return response.access_token;
       })();
       refreshPromiseRef.current = request;
