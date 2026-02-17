@@ -763,7 +763,7 @@ class EmailProviderError extends Error {
 const sendBrevoEmail = async ({ toEmail, toName, subject, textContent, htmlContent }) => {
   const apiKey = process.env.BREVO_API_KEY;
   const senderEmail = process.env.BREVO_SENDER_EMAIL;
-  const senderName = BRAND_NAME;
+  const senderName = `"${BRAND_NAME.replace(/"/g, '\\"')}"`;
 
   if (!apiKey || !senderEmail) {
     throw new Error('Missing BREVO_API_KEY or BREVO_SENDER_EMAIL.');
