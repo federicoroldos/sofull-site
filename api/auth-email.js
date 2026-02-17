@@ -572,15 +572,17 @@ export const buildWelcomeEmail = ({
   supportEmail,
   privacyUrl,
   termsUrl,
+  metaRows,
   accountEmail,
   logoUrl
 }) => {
   const subject = 'Welcome to 배불러! (So Full!)';
   const preheader = 'Your 배불러! (So Full!) account is ready to go.';
   const greeting = displayName || 'there';
+  const detailsRows = Array.isArray(metaRows) ? metaRows : [];
   const bodyLines = [
     'Welcome to 배불러! (So Full!) You are all set to start tracking your favorite ramyeon, snacks, drinks, and ice cream.',
-    'This email confirms your first sign-in. No further action is needed.'
+    'This email confirms your first sign-in. Here are the details we captured.'
   ];
   const cta = appUrl ? { label: 'Open 배불러! (So Full!)', url: appUrl } : null;
   const callout = {
@@ -595,7 +597,7 @@ export const buildWelcomeEmail = ({
     textContent: buildTextContent({
       greeting,
       bodyLines,
-      metaRows: [],
+      metaRows: detailsRows,
       cta,
       callout,
       supportEmail,
@@ -608,7 +610,7 @@ export const buildWelcomeEmail = ({
       greeting: `Hi ${greeting},`,
       bodyLines,
       cta,
-      metaRows: [],
+      metaRows: detailsRows,
       callout,
       appUrl,
       logoUrl,
@@ -761,7 +763,7 @@ class EmailProviderError extends Error {
 const sendBrevoEmail = async ({ toEmail, toName, subject, textContent, htmlContent }) => {
   const apiKey = process.env.BREVO_API_KEY;
   const senderEmail = process.env.BREVO_SENDER_EMAIL;
-  const senderName = process.env.BREVO_SENDER_NAME || BRAND_NAME;
+  const senderName = BRAND_NAME;
 
   if (!apiKey || !senderEmail) {
     throw new Error('Missing BREVO_API_KEY or BREVO_SENDER_EMAIL.');
@@ -1077,6 +1079,7 @@ export default async function handler(req, res) {
               supportEmail,
               privacyUrl,
               termsUrl,
+              metaRows,
               accountEmail: email,
               logoUrl
             });
