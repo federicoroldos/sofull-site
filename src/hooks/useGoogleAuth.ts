@@ -298,10 +298,40 @@ const getRegistrationTimestampMs = (data: Record<string, unknown>) =>
   toTimestampMs(data.firstSeenAt) ??
   toTimestampMs(data.createdAt);
 
+const getErrorCode = (err: unknown) => {
+  if (!err || typeof err !== 'object') return '';
+  const code = (err as { code?: unknown }).code;
+  return typeof code === 'string' ? code : '';
+};
+
+const isFirestorePermissionDenied = (err: unknown) => {
+  const code = getErrorCode(err);
+  return code === 'permission-denied' || code === 'firestore/permission-denied';
+};
+
+const localWebDeviceGateKey = (uid: string, deviceId: string) =>
+  `sofull-web-device-gate:${uid}:${deviceId}`;
+
+const hasLocalWebDeviceGate = (uid: string, deviceId: string) => {
+  try {
+    return localStorage.getItem(localWebDeviceGateKey(uid, deviceId)) === '1';
+  } catch {
+    return false;
+  }
+};
+
+const markLocalWebDeviceGate = (uid: string, deviceId: string) => {
+  try {
+    localStorage.setItem(localWebDeviceGateKey(uid, deviceId), '1');
+  } catch {
+    // Ignore storage write failures.
+  }
+};
+
 const shouldSendWebLoginEmail = async (uid: string) => {
+  const deviceId = getOrCreateWebDeviceId();
   try {
     const db = getFirestore(firebaseApp);
-    const deviceId = getOrCreateWebDeviceId();
     const deviceRef = doc(db, 'users', uid, 'devices', deviceId);
     const existing = await getDoc(deviceRef);
     if (existing.exists()) {
@@ -337,6 +367,13 @@ const shouldSendWebLoginEmail = async (uid: string) => {
     );
     return true;
   } catch (err) {
+    if (isFirestorePermissionDenied(err)) {
+      if (hasLocalWebDeviceGate(uid, deviceId)) {
+        return false;
+      }
+      markLocalWebDeviceGate(uid, deviceId);
+      return true;
+    }
     console.warn('Web device email gate failed.', err);
     return true;
   }
