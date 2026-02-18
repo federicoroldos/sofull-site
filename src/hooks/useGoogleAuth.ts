@@ -12,7 +12,7 @@ import {
   signInWithPopup,
   signOut
 } from 'firebase/auth';
-import { doc, getDoc, getFirestore, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, getDoc, getFirestore, serverTimestamp, setDoc } from 'firebase/firestore/lite';
 import type { User } from 'firebase/auth';
 
 const provider = new GoogleAuthProvider();
