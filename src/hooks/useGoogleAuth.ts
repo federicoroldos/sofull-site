@@ -522,23 +522,34 @@ export const useGoogleAuth = () => {
   );
 
   const getAccessToken = useCallback(
-    async (options?: { interactive?: boolean; forceRefresh?: boolean; requireDriveScope?: boolean }) => {
+    async (options?: {
+      interactive?: boolean;
+      forceRefresh?: boolean;
+      requireDriveScope?: boolean;
+      forceDriveScopePrompt?: boolean;
+    }) => {
       const current = accessTokenRef.current;
       const expiresAt = accessTokenExpiresAtRef.current;
       const isExpired = Boolean(expiresAt && Date.now() >= expiresAt);
       if (!IS_NATIVE) return current;
       if (!user) return null;
       const requiresDriveScope = Boolean(IS_ANDROID && options?.requireDriveScope);
+      const shouldPromptForDriveScope =
+        requiresDriveScope &&
+        Boolean(options?.interactive) &&
+        (Boolean(options?.forceDriveScopePrompt) || !androidDriveScopeGranted);
 
-      if (requiresDriveScope && !androidDriveScopeGranted) {
-        if (!options?.interactive) {
-          return current;
-        }
+      if (requiresDriveScope && !options?.interactive && !androidDriveScopeGranted) {
+        return current;
+      }
+
+      if (shouldPromptForDriveScope) {
         try {
           const result = await nativeSignInWithScopes(GOOGLE_SCOPES);
           setAndroidDriveScopeGranted(true);
           return result.accessToken;
         } catch (err) {
+          setAndroidDriveScopeGranted(false);
           const message =
             err instanceof Error && err.message
               ? err.message
@@ -669,10 +680,9 @@ export const useGoogleAuth = () => {
     setError(null);
     try {
       if (IS_NATIVE) {
-        const loginScopes = IS_ANDROID ? BASIC_SCOPES : GOOGLE_SCOPES;
-        const authResult = await nativeSignInWithScopes(loginScopes);
+        const authResult = await nativeSignInWithScopes(GOOGLE_SCOPES);
         updateSessionStart(Date.now());
-        setAndroidDriveScopeGranted(!IS_ANDROID);
+        setAndroidDriveScopeGranted(true);
         void notifyAuthEmail(authResult.user);
         return;
       }

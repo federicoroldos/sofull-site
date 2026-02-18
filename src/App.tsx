@@ -81,11 +81,21 @@ const DRIVE_AUTH_ERROR_PATTERNS = [
   /\bInvalid Credentials\b/i,
   /\bauthError\b/i
 ];
+const DRIVE_SCOPE_ERROR_PATTERNS = [
+  /\bACCESS_TOKEN_SCOPE_INSUFFICIENT\b/i,
+  /\binsufficient authentication scopes?\b/i,
+  /\binsufficient permissions?\b/i
+];
 const isDriveAuthError = (error: unknown) =>
   error instanceof Error && DRIVE_AUTH_ERROR_PATTERNS.some((pattern) => pattern.test(error.message));
+const isDriveScopeError = (error: unknown) =>
+  error instanceof Error && DRIVE_SCOPE_ERROR_PATTERNS.some((pattern) => pattern.test(error.message));
 const formatDriveSyncError = (error: unknown, fallback: string) => {
   if (isDriveAuthError(error)) {
     return 'Google Drive session expired. Sign in again to continue syncing.';
+  }
+  if (isDriveScopeError(error)) {
+    return 'Google Drive access is required to sync. Please allow access and try again.';
   }
   return error instanceof Error && error.message ? error.message : fallback;
 };
@@ -171,11 +181,33 @@ const App = () => {
   const IS_ANDROID = Capacitor.getPlatform() === 'android';
   const isLoggedIn = Boolean(user && (IS_NATIVE || accessToken));
   const resolveDriveToken = useCallback(
-    async (interactive = false, requireDriveScope = false) => {
+    async (interactive = false, requireDriveScope = false, forceDriveScopePrompt = false) => {
       if (!IS_NATIVE) return accessToken;
-      return await getAccessToken({ interactive, forceRefresh: false, requireDriveScope });
+      return await getAccessToken({
+        interactive,
+        forceRefresh: false,
+        requireDriveScope,
+        forceDriveScopePrompt
+      });
     },
     [IS_NATIVE, accessToken, getAccessToken]
+  );
+  const runDriveOperationWithScopeRetry = useCallback(
+    async <T,>(token: string, operation: (driveToken: string) => Promise<T>): Promise<T> => {
+      try {
+        return await operation(token);
+      } catch (error) {
+        if (!IS_ANDROID || !isDriveScopeError(error)) {
+          throw error;
+        }
+        const promptedToken = await resolveDriveToken(true, true, true);
+        if (!promptedToken) {
+          throw error;
+        }
+        return await operation(promptedToken);
+      }
+    },
+    [IS_ANDROID, resolveDriveToken]
   );
 
   const collatorEn = useMemo(() => new Intl.Collator('en', { sensitivity: 'base' }), []);
@@ -273,19 +305,24 @@ const App = () => {
     if (!token) return;
     setSyncState('loading');
     setSyncMessage('Refreshing from Google Drive...');
-    try {
-      const fileId = driveFileId || (await ensureAppDataFile(token));
-      if (!driveFileId) {
+    let resolvedFileId = driveFileId;
+    const refreshFromDrive = async (driveToken: string) => {
+      const fileId = resolvedFileId || (await ensureAppDataFile(driveToken));
+      if (!resolvedFileId) {
+        resolvedFileId = fileId;
         setDriveFileId(fileId);
       }
-      const content = await downloadFromAppData(token, fileId);
+      const content = await downloadFromAppData(driveToken, fileId);
       const data = parseDataFile(content);
       setEntries(data.entries || []);
       setSyncState('idle');
       setSyncMessage(`Refreshed ${data.entries.length} entries.`);
       if (!content || content.trim().length === 0) {
-        await uploadToAppData(token, fileId, JSON.stringify(DEFAULT_DATA, null, 2));
+        await uploadToAppData(driveToken, fileId, JSON.stringify(DEFAULT_DATA, null, 2));
       }
+    };
+    try {
+      await runDriveOperationWithScopeRetry(token, refreshFromDrive);
     } catch (error) {
       const message = formatDriveSyncError(error, 'Drive load failed.');
       setSyncState('error');
@@ -298,20 +335,25 @@ const App = () => {
     if (!token) return;
     setSyncState('saving');
     setSyncMessage('Saving to Google Drive...');
-    try {
+    let resolvedFileId = driveFileId;
+    const saveWithToken = async (driveToken: string) => {
       const sanitizedEntries = sanitizeEntries(nextEntries);
       const payload: SofullDataFile = {
         version: 1,
         updatedAt: nowIso(),
         entries: sanitizedEntries
       };
-      const fileId = driveFileId || (await ensureAppDataFile(token));
-      if (!driveFileId) {
+      const fileId = resolvedFileId || (await ensureAppDataFile(driveToken));
+      if (!resolvedFileId) {
+        resolvedFileId = fileId;
         setDriveFileId(fileId);
       }
-      await uploadToAppData(token, fileId, JSON.stringify(payload, null, 2));
+      await uploadToAppData(driveToken, fileId, JSON.stringify(payload, null, 2));
       setSyncState('idle');
       setSyncMessage(`Last synced ${new Date().toLocaleTimeString([], { hour12: false })}.`);
+    };
+    try {
+      await runDriveOperationWithScopeRetry(token, saveWithToken);
     } catch (error) {
       const message = formatDriveSyncError(error, 'Drive sync failed.');
       setSyncState('error');
@@ -324,13 +366,15 @@ const App = () => {
     if (!token) {
       throw new Error('Google session expired. Sign in again and retry.');
     }
-    if (imageFolderIdRef.current) {
-      return imageFolderIdRef.current;
-    }
-    const rootFolderId = await ensureFolder(token, DRIVE_ROOT_FOLDER_NAME);
-    const imagesFolderId = await ensureFolder(token, DRIVE_IMAGE_FOLDER_NAME, rootFolderId);
-    imageFolderIdRef.current = imagesFolderId;
-    return imagesFolderId;
+    return await runDriveOperationWithScopeRetry(token, async (driveToken) => {
+      if (imageFolderIdRef.current) {
+        return imageFolderIdRef.current;
+      }
+      const rootFolderId = await ensureFolder(driveToken, DRIVE_ROOT_FOLDER_NAME);
+      const imagesFolderId = await ensureFolder(driveToken, DRIVE_IMAGE_FOLDER_NAME, rootFolderId);
+      imageFolderIdRef.current = imagesFolderId;
+      return imagesFolderId;
+    });
   };
 
   const handleSaveEntry = async (values: EntryFormSubmitValues) => {
@@ -441,9 +485,12 @@ const App = () => {
     void (async () => {
       await saveToDrive(nextEntries);
       const token = await resolveDriveToken(true, IS_ANDROID);
-      if (token && entry.imageDriveFileId) {
+      const imageDriveFileId = entry.imageDriveFileId;
+      if (token && imageDriveFileId) {
         try {
-          await deleteDriveFile(token, entry.imageDriveFileId);
+          await runDriveOperationWithScopeRetry(token, async (driveToken) => {
+            await deleteDriveFile(driveToken, imageDriveFileId);
+          });
         } catch (error) {
           const message = formatDriveSyncError(error, 'Drive image delete failed.');
           setSyncState('error');
@@ -494,19 +541,24 @@ const App = () => {
       }
       setSyncState('loading');
       setSyncMessage('Loading from Google Drive...');
-      try {
-        const fileId = await ensureAppDataFile(token);
+      let resolvedFileId = '';
+      const loadFromDrive = async (driveToken: string) => {
+        const fileId = resolvedFileId || (await ensureAppDataFile(driveToken));
         if (cancelled) return;
+        resolvedFileId = fileId;
         setDriveFileId(fileId);
-        const content = await downloadFromAppData(token, fileId);
+        const content = await downloadFromAppData(driveToken, fileId);
         if (cancelled) return;
         const data = parseDataFile(content);
         setEntries(data.entries || []);
         setSyncState('idle');
         setSyncMessage(`Loaded ${data.entries.length} entries.`);
         if (!content || content.trim().length === 0) {
-          await uploadToAppData(token, fileId, JSON.stringify(DEFAULT_DATA, null, 2));
+          await uploadToAppData(driveToken, fileId, JSON.stringify(DEFAULT_DATA, null, 2));
         }
+      };
+      try {
+        await runDriveOperationWithScopeRetry(token, loadFromDrive);
       } catch (error) {
         const message = formatDriveSyncError(error, 'Drive load failed.');
         setSyncState('error');
@@ -518,7 +570,7 @@ const App = () => {
     return () => {
       cancelled = true;
     };
-  }, [IS_ANDROID, isLoggedIn, resolveDriveToken]);
+  }, [IS_ANDROID, isLoggedIn, resolveDriveToken, runDriveOperationWithScopeRetry]);
 
   useEffect(() => {
     const activeIds = new Set(
