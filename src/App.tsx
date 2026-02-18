@@ -75,6 +75,20 @@ const SPICE_ORDER: Record<SpicinessLevel, number> = {
   hot: 3,
   extreme: 4
 };
+const DRIVE_AUTH_ERROR_PATTERNS = [
+  /"code"\s*:\s*401/,
+  /\bUNAUTHENTICATED\b/i,
+  /\bInvalid Credentials\b/i,
+  /\bauthError\b/i
+];
+const isDriveAuthError = (error: unknown) =>
+  error instanceof Error && DRIVE_AUTH_ERROR_PATTERNS.some((pattern) => pattern.test(error.message));
+const formatDriveSyncError = (error: unknown, fallback: string) => {
+  if (isDriveAuthError(error)) {
+    return 'Google Drive session expired. Sign in again to continue syncing.';
+  }
+  return error instanceof Error && error.message ? error.message : fallback;
+};
 const ATTRIBUTE_SORT_BY_CATEGORY: Record<
   CategoryFilter,
   { sortMode: SortMode; label: string } | null
@@ -272,7 +286,7 @@ const App = () => {
         await uploadToAppData(token, fileId, JSON.stringify(DEFAULT_DATA, null, 2));
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Drive load failed.';
+      const message = formatDriveSyncError(error, 'Drive load failed.');
       setSyncState('error');
       setSyncMessage(message);
     }
@@ -298,7 +312,7 @@ const App = () => {
       setSyncState('idle');
       setSyncMessage(`Last synced ${new Date().toLocaleTimeString([], { hour12: false })}.`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Drive sync failed.';
+      const message = formatDriveSyncError(error, 'Drive sync failed.');
       setSyncState('error');
       setSyncMessage(message);
     }
@@ -430,7 +444,7 @@ const App = () => {
         try {
           await deleteDriveFile(token, entry.imageDriveFileId);
         } catch (error) {
-          const message = error instanceof Error ? error.message : 'Drive image delete failed.';
+          const message = formatDriveSyncError(error, 'Drive image delete failed.');
           setSyncState('error');
           setSyncMessage(message);
         }
@@ -487,7 +501,7 @@ const App = () => {
           await uploadToAppData(token, fileId, JSON.stringify(DEFAULT_DATA, null, 2));
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Drive load failed.';
+        const message = formatDriveSyncError(error, 'Drive load failed.');
         setSyncState('error');
         setSyncMessage(message);
       }

@@ -204,7 +204,7 @@ const normalizeDeviceModel = (value?: string | null) => {
 };
 
 const extractAndroidModel = (userAgent: string) => {
-  const match = userAgent.match(/Android[^;]*;\s*([^;\)]+)(?:\sBuild|\)|;)/i);
+  const match = userAgent.match(/Android[^;]*;\s*([^;)]+)(?:\sBuild|\)|;)/i);
   if (!match) return null;
   const raw = match[1].replace(/\s*Build.*$/i, '').trim();
   if (!raw || /^(mobile|tablet)$/i.test(raw)) return null;
@@ -410,10 +410,15 @@ export const useGoogleAuth = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const accessTokenRef = useRef<string | null>(stored.token);
+  const accessTokenExpiresAtRef = useRef<number | null>(stored.expiresAt);
 
   useEffect(() => {
     accessTokenRef.current = accessToken;
   }, [accessToken]);
+
+  useEffect(() => {
+    accessTokenExpiresAtRef.current = accessTokenExpiresAt;
+  }, [accessTokenExpiresAt]);
 
   const updateSessionStart = useCallback((value: number | null) => {
     setSessionStartMs(value);
@@ -435,10 +440,10 @@ export const useGoogleAuth = () => {
     setTokenExpired(Boolean(expiresAt && storedAt >= expiresAt));
   }, []);
 
-  const expireToken = () => {
+  const expireToken = useCallback(() => {
     applyAccessToken(null);
     setTokenExpired(true);
-  };
+  }, [applyAccessToken]);
 
   const refreshAccessToken = useCallback(
     async (options?: { interactive?: boolean; force?: boolean }) => {
@@ -475,24 +480,7 @@ export const useGoogleAuth = () => {
 
         const refreshed = await trySilentRefresh();
         if (refreshed) return refreshed;
-
-        try {
-          await ensureNativeSocialLogin();
-          const response = await SocialLogin.login({
-            provider: 'google',
-            options: { scopes: GOOGLE_SCOPES }
-          });
-          if (response.provider !== 'google') return accessTokenRef.current;
-          const result = response.result;
-          if (result.responseType !== 'online') return accessTokenRef.current;
-          const accessToken = result.accessToken?.token ?? null;
-          if (accessToken) {
-            applyAccessToken(accessToken);
-          }
-          return accessToken ?? accessTokenRef.current;
-        } catch {
-          return accessTokenRef.current;
-        }
+        return accessTokenRef.current;
       }
       return accessTokenRef.current;
     },
@@ -502,16 +490,30 @@ export const useGoogleAuth = () => {
   const getAccessToken = useCallback(
     async (options?: { interactive?: boolean; forceRefresh?: boolean }) => {
       const current = accessTokenRef.current;
+      const expiresAt = accessTokenExpiresAtRef.current;
+      const isExpired = Boolean(expiresAt && Date.now() >= expiresAt);
       if (!IS_NATIVE) return current;
-      if (options?.forceRefresh || !current) {
-        return await refreshAccessToken({
-          interactive: options?.interactive,
-          force: options?.forceRefresh
-        });
+      if (!user) return null;
+
+      if (!options?.forceRefresh && current && !isExpired) {
+        return current;
       }
+
+      const refreshed = await refreshAccessToken({
+        interactive: options?.interactive,
+        force: options?.forceRefresh || isExpired || !current
+      });
+
+      if (refreshed) return refreshed;
+
+      if (!current) {
+        expireToken();
+        return null;
+      }
+
       return current;
     },
-    [refreshAccessToken]
+    [expireToken, refreshAccessToken, user]
   );
 
   const forceSessionLogout = useCallback(async (reason?: string) => {
@@ -605,7 +607,7 @@ export const useGoogleAuth = () => {
     checkExpiry();
     const interval = window.setInterval(checkExpiry, TOKEN_EXPIRY_POLL_MS);
     return () => window.clearInterval(interval);
-  }, [user, accessToken, accessTokenExpiresAt]);
+  }, [user, accessToken, accessTokenExpiresAt, expireToken]);
 
   const signIn = async () => {
     setLoading(true);
