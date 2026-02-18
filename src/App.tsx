@@ -1,11 +1,11 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
 import EntryCard from './components/EntryCard';
 import EntryFormModal, { type EntryFormSubmitValues } from './components/EntryFormModal';
 import { useGoogleAuth } from './hooks/useGoogleAuth';
 import {
   deleteDriveFile,
   downloadFromAppData,
-  DriveAuthError,
   ensureAppDataFile,
   ensureFolder,
   fetchFileBlob,
@@ -132,7 +132,6 @@ const App = () => {
     accessToken,
     tokenExpired,
     clearTokenExpired,
-    expireAccessToken,
     loading: authLoading,
     error: authError,
     signIn,
@@ -154,41 +153,14 @@ const App = () => {
   const failedDriveImageRef = useRef(new Set<string>());
   const imageFolderIdRef = useRef<string | null>(null);
 
-  const isLoggedIn = Boolean(user);
-  const handleDriveAuthError = useCallback(
-    (error: unknown) => {
-      if (error instanceof DriveAuthError) {
-        expireAccessToken();
-      }
+  const IS_NATIVE = Capacitor.isNativePlatform();
+  const isLoggedIn = Boolean(user && (IS_NATIVE || accessToken));
+  const resolveDriveToken = useCallback(
+    async (interactive = false) => {
+      if (!IS_NATIVE) return accessToken;
+      return await getAccessToken({ interactive, forceRefresh: false });
     },
-    [expireAccessToken]
-  );
-
-  const withDriveAuthRetry: <T>(
-    run: (token: string) => Promise<T>,
-    options?: { interactive?: boolean }
-  ) => Promise<T> = useCallback(
-    async (run, options) => {
-      const token = await getAccessToken({ interactive: options?.interactive });
-      if (!token) {
-        throw new DriveAuthError();
-      }
-      try {
-        return await run(token);
-      } catch (error) {
-        if (error instanceof DriveAuthError) {
-          const refreshed = await getAccessToken({
-            interactive: options?.interactive,
-            forceRefresh: true
-          });
-          if (refreshed && refreshed !== token) {
-            return await run(refreshed);
-          }
-        }
-        throw error;
-      }
-    },
-    [getAccessToken]
+    [IS_NATIVE, accessToken, getAccessToken]
   );
 
   const collatorEn = useMemo(() => new Intl.Collator('en', { sensitivity: 'base' }), []);
@@ -282,34 +254,24 @@ const App = () => {
   };
 
   const refreshList = async () => {
+    const token = await resolveDriveToken(true);
+    if (!token) return;
     setSyncState('loading');
     setSyncMessage('Refreshing from Google Drive...');
     try {
-      const { fileId, content } = await withDriveAuthRetry(
-        async (token) => {
-          const resolvedFileId = driveFileId || (await ensureAppDataFile(token));
-          return {
-            fileId: resolvedFileId,
-            content: await downloadFromAppData(token, resolvedFileId)
-          };
-        },
-        { interactive: true }
-      );
+      const fileId = driveFileId || (await ensureAppDataFile(token));
       if (!driveFileId) {
         setDriveFileId(fileId);
       }
+      const content = await downloadFromAppData(token, fileId);
       const data = parseDataFile(content);
       setEntries(data.entries || []);
       setSyncState('idle');
       setSyncMessage(`Refreshed ${data.entries.length} entries.`);
       if (!content || content.trim().length === 0) {
-        await withDriveAuthRetry(
-          (token) => uploadToAppData(token, fileId, JSON.stringify(DEFAULT_DATA, null, 2)),
-          { interactive: true }
-        );
+        await uploadToAppData(token, fileId, JSON.stringify(DEFAULT_DATA, null, 2));
       }
     } catch (error) {
-      handleDriveAuthError(error);
       const message = error instanceof Error ? error.message : 'Drive load failed.';
       setSyncState('error');
       setSyncMessage(message);
@@ -317,6 +279,8 @@ const App = () => {
   };
 
   const saveToDrive = async (nextEntries: SofullEntry[]) => {
+    const token = await resolveDriveToken(true);
+    if (!token) return;
     setSyncState('saving');
     setSyncMessage('Saving to Google Drive...');
     try {
@@ -326,24 +290,14 @@ const App = () => {
         updatedAt: nowIso(),
         entries: sanitizedEntries
       };
-      const fileId = await withDriveAuthRetry(
-        async (token) => {
-          if (driveFileId) return driveFileId;
-          return ensureAppDataFile(token);
-        },
-        { interactive: true }
-      );
+      const fileId = driveFileId || (await ensureAppDataFile(token));
       if (!driveFileId) {
         setDriveFileId(fileId);
       }
-      await withDriveAuthRetry(
-        (token) => uploadToAppData(token, fileId, JSON.stringify(payload, null, 2)),
-        { interactive: true }
-      );
+      await uploadToAppData(token, fileId, JSON.stringify(payload, null, 2));
       setSyncState('idle');
       setSyncMessage(`Last synced ${new Date().toLocaleTimeString([], { hour12: false })}.`);
     } catch (error) {
-      handleDriveAuthError(error);
       const message = error instanceof Error ? error.message : 'Drive sync failed.';
       setSyncState('error');
       setSyncMessage(message);
@@ -351,128 +305,118 @@ const App = () => {
   };
 
   const ensureImageFolderId = async () => {
+    const token = await resolveDriveToken(true);
+    if (!token) {
+      throw new Error('Google session expired. Sign in again and retry.');
+    }
     if (imageFolderIdRef.current) {
       return imageFolderIdRef.current;
     }
-    const imagesFolderId = await withDriveAuthRetry(
-      async (token) => {
-        const rootFolderId = await ensureFolder(token, DRIVE_ROOT_FOLDER_NAME);
-        return ensureFolder(token, DRIVE_IMAGE_FOLDER_NAME, rootFolderId);
-      },
-      { interactive: true }
-    );
+    const rootFolderId = await ensureFolder(token, DRIVE_ROOT_FOLDER_NAME);
+    const imagesFolderId = await ensureFolder(token, DRIVE_IMAGE_FOLDER_NAME, rootFolderId);
     imageFolderIdRef.current = imagesFolderId;
     return imagesFolderId;
   };
 
   const handleSaveEntry = async (values: EntryFormSubmitValues) => {
-    try {
-
-      let nextImageDriveFileId = editingEntry?.imageDriveFileId || '';
-      let nextImageMimeType = editingEntry?.imageMimeType || '';
-      let nextImageName = editingEntry?.imageName || '';
-      let nextImageUrl = values.imageUrl;
-
-      if (values.clearImage) {
-        if (editingEntry?.imageDriveFileId) {
-          await withDriveAuthRetry(
-            (token) => deleteDriveFile(token, editingEntry.imageDriveFileId!),
-            { interactive: true }
-          );
-        }
-        nextImageDriveFileId = '';
-        nextImageMimeType = '';
-        nextImageName = '';
-        nextImageUrl = '';
-      }
-
-      if (values.imageFile) {
-        if (!values.imageFile.type.startsWith('image/')) {
-          throw new Error('Please choose a valid image file.');
-        }
-        if (values.imageFile.size > MAX_IMAGE_SIZE_BYTES) {
-          throw new Error('Image size must be 8MB or less.');
-        }
-        const folderId = await ensureImageFolderId();
-        const imageName = buildImageFileName(values.name, values.nameEnglish, values.imageFile.name);
-        const uploadedImage = await withDriveAuthRetry(
-          (token) => uploadFileMultipart(token, values.imageFile!, folderId, imageName),
-          { interactive: true }
-        );
-        nextImageDriveFileId = uploadedImage.id;
-        nextImageMimeType = uploadedImage.mimeType;
-        nextImageName = uploadedImage.name;
-        if (editingEntry?.imageDriveFileId) {
-          await withDriveAuthRetry(
-            (token) => deleteDriveFile(token, editingEntry.imageDriveFileId!),
-            { interactive: true }
-          );
-        }
-      }
-
-      if (
-        editingEntry?.imageDriveFileId &&
-        !values.clearImage &&
-        !values.imageFile
-      ) {
-        const desiredImageName = buildImageFileName(
-          values.name,
-          values.nameEnglish,
-          editingEntry.imageName || ''
-        );
-        if (desiredImageName && desiredImageName !== editingEntry.imageName) {
-          const updatedImage = await withDriveAuthRetry(
-            (token) => updateDriveFileName(token, editingEntry.imageDriveFileId!, desiredImageName),
-            { interactive: true }
-          );
-          nextImageName = updatedImage.name;
-        }
-      }
-
-      const entryPayload = {
-        name: values.name,
-        nameEnglish: values.nameEnglish,
-        brand: values.brand,
-        category: values.category,
-        formFactor: values.formFactor,
-        iceCreamFormFactor: values.iceCreamFormFactor,
-        rating: values.rating,
-        spiciness: values.spiciness,
-        description: values.description,
-        imageUrl: nextImageUrl,
-        imageDriveFileId: nextImageDriveFileId,
-        imageMimeType: nextImageMimeType,
-        imageName: nextImageName
-      };
-
-      if (editingEntry) {
-        const updatedEntry: SofullEntry = {
-          ...editingEntry,
-          ...entryPayload,
-          updatedAt: nowIso()
-        };
-        const nextEntries = sanitizeEntries(
-          entries.map((entry) => (entry.id === editingEntry.id ? updatedEntry : entry))
-        );
-        setEntries(nextEntries);
-        await saveToDrive(nextEntries);
-      } else {
-        const newEntry: SofullEntry = {
-          id: createId(),
-          createdAt: nowIso(),
-          updatedAt: nowIso(),
-          ...entryPayload
-        };
-        const nextEntries = sanitizeEntries([newEntry, ...entries]);
-        setEntries(nextEntries);
-        await saveToDrive(nextEntries);
-      }
-
-      closeModal();
-    } catch (error) {
-      handleDriveAuthError(error);
-      throw error;
+    const token = await resolveDriveToken(true);
+    if (!token) {
+      throw new Error('Google session expired. Sign in again before saving.');
     }
+
+    let nextImageDriveFileId = editingEntry?.imageDriveFileId || '';
+    let nextImageMimeType = editingEntry?.imageMimeType || '';
+    let nextImageName = editingEntry?.imageName || '';
+    let nextImageUrl = values.imageUrl;
+
+    if (values.clearImage) {
+      if (editingEntry?.imageDriveFileId) {
+        await deleteDriveFile(token, editingEntry.imageDriveFileId);
+      }
+      nextImageDriveFileId = '';
+      nextImageMimeType = '';
+      nextImageName = '';
+      nextImageUrl = '';
+    }
+
+    if (values.imageFile) {
+      if (!values.imageFile.type.startsWith('image/')) {
+        throw new Error('Please choose a valid image file.');
+      }
+      if (values.imageFile.size > MAX_IMAGE_SIZE_BYTES) {
+        throw new Error('Image size must be 8MB or less.');
+      }
+      const folderId = await ensureImageFolderId();
+      const imageName = buildImageFileName(values.name, values.nameEnglish, values.imageFile.name);
+      const uploadedImage = await uploadFileMultipart(token, values.imageFile, folderId, imageName);
+      nextImageDriveFileId = uploadedImage.id;
+      nextImageMimeType = uploadedImage.mimeType;
+      nextImageName = uploadedImage.name;
+      if (editingEntry?.imageDriveFileId) {
+        await deleteDriveFile(token, editingEntry.imageDriveFileId);
+      }
+    }
+
+    if (
+      editingEntry?.imageDriveFileId &&
+      !values.clearImage &&
+      !values.imageFile
+    ) {
+      const desiredImageName = buildImageFileName(
+        values.name,
+        values.nameEnglish,
+        editingEntry.imageName || ''
+      );
+      if (desiredImageName && desiredImageName !== editingEntry.imageName) {
+        const updatedImage = await updateDriveFileName(
+          token,
+          editingEntry.imageDriveFileId,
+          desiredImageName
+        );
+        nextImageName = updatedImage.name;
+      }
+    }
+
+    const entryPayload = {
+      name: values.name,
+      nameEnglish: values.nameEnglish,
+      brand: values.brand,
+      category: values.category,
+      formFactor: values.formFactor,
+      iceCreamFormFactor: values.iceCreamFormFactor,
+      rating: values.rating,
+      spiciness: values.spiciness,
+      description: values.description,
+      imageUrl: nextImageUrl,
+      imageDriveFileId: nextImageDriveFileId,
+      imageMimeType: nextImageMimeType,
+      imageName: nextImageName
+    };
+
+    if (editingEntry) {
+      const updatedEntry: SofullEntry = {
+        ...editingEntry,
+        ...entryPayload,
+        updatedAt: nowIso()
+      };
+      const nextEntries = sanitizeEntries(
+        entries.map((entry) => (entry.id === editingEntry.id ? updatedEntry : entry))
+      );
+      setEntries(nextEntries);
+      await saveToDrive(nextEntries);
+    } else {
+      const newEntry: SofullEntry = {
+        id: createId(),
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+        ...entryPayload
+      };
+      const nextEntries = sanitizeEntries([newEntry, ...entries]);
+      setEntries(nextEntries);
+      await saveToDrive(nextEntries);
+    }
+
+    closeModal();
   };
 
   const handleDelete = (entry: SofullEntry) => {
@@ -481,14 +425,11 @@ const App = () => {
     setEntries(nextEntries);
     void (async () => {
       await saveToDrive(nextEntries);
-      if (entry.imageDriveFileId) {
+      const token = await resolveDriveToken(true);
+      if (token && entry.imageDriveFileId) {
         try {
-          await withDriveAuthRetry(
-            (token) => deleteDriveFile(token, entry.imageDriveFileId!),
-            { interactive: true }
-          );
+          await deleteDriveFile(token, entry.imageDriveFileId);
         } catch (error) {
-          handleDriveAuthError(error);
           const message = error instanceof Error ? error.message : 'Drive image delete failed.';
           setSyncState('error');
           setSyncMessage(message);
@@ -507,7 +448,7 @@ const App = () => {
   }, []);
 
   useEffect(() => {
-    if (!accessToken) {
+    if (!accessToken && !IS_NATIVE) {
       const resetStateTimer = window.setTimeout(() => {
         setEntries([]);
         setDriveFileId('');
@@ -528,25 +469,24 @@ const App = () => {
 
     let cancelled = false;
     const load = async () => {
+      const token = await resolveDriveToken();
+      if (!token) return;
       setSyncState('loading');
       setSyncMessage('Loading from Google Drive...');
       try {
-        const fileId = await withDriveAuthRetry((token) => ensureAppDataFile(token));
+        const fileId = await ensureAppDataFile(token);
         if (cancelled) return;
         setDriveFileId(fileId);
-        const content = await withDriveAuthRetry((token) => downloadFromAppData(token, fileId));
+        const content = await downloadFromAppData(token, fileId);
         if (cancelled) return;
         const data = parseDataFile(content);
         setEntries(data.entries || []);
         setSyncState('idle');
         setSyncMessage(`Loaded ${data.entries.length} entries.`);
         if (!content || content.trim().length === 0) {
-          await withDriveAuthRetry((token) =>
-            uploadToAppData(token, fileId, JSON.stringify(DEFAULT_DATA, null, 2))
-          );
+          await uploadToAppData(token, fileId, JSON.stringify(DEFAULT_DATA, null, 2));
         }
       } catch (error) {
-        handleDriveAuthError(error);
         const message = error instanceof Error ? error.message : 'Drive load failed.';
         setSyncState('error');
         setSyncMessage(message);
@@ -557,7 +497,7 @@ const App = () => {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, withDriveAuthRetry]);
+  }, [IS_NATIVE, accessToken, resolveDriveToken]);
 
   useEffect(() => {
     const activeIds = new Set(
@@ -582,7 +522,7 @@ const App = () => {
   }, [entries]);
 
   useEffect(() => {
-    if (!accessToken) return;
+    if (!accessToken && !IS_NATIVE) return;
 
     const missingIds = Array.from(
       new Set(
@@ -602,7 +542,12 @@ const App = () => {
 
     let cancelled = false;
     const loadImage = async (fileId: string) => {
-      const request = withDriveAuthRetry((token) => fetchFileBlob(token, fileId))
+      const token = await resolveDriveToken();
+      if (!token) {
+        failedDriveImageRef.current.add(fileId);
+        return '';
+      }
+      const request = fetchFileBlob(token, fileId)
         .then((blob) => {
           const objectUrl = URL.createObjectURL(blob);
           if (cancelled) {
@@ -612,8 +557,7 @@ const App = () => {
           driveImageCacheRef.current.set(fileId, objectUrl);
           return objectUrl;
         })
-        .catch((error) => {
-          handleDriveAuthError(error);
+        .catch(() => {
           failedDriveImageRef.current.add(fileId);
           return '';
         })
@@ -632,7 +576,7 @@ const App = () => {
     return () => {
       cancelled = true;
     };
-  }, [entries, accessToken, withDriveAuthRetry, handleDriveAuthError]);
+  }, [IS_NATIVE, entries, accessToken, resolveDriveToken]);
 
   return (
     <div className="app">
