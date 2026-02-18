@@ -4,18 +4,8 @@ const FILES_URL = 'https://www.googleapis.com/drive/v3/files';
 const BACKUP_FILENAME = 'sofull.json';
 const LEGACY_BACKUP_FILENAME = 'ramyeon-dictionary.json';
 
-export class DriveAuthError extends Error {
-  constructor(message = 'Google Drive access expired. Please sign in again.') {
-    super(message);
-    this.name = 'DriveAuthError';
-  }
-}
-
 const handleDriveError = async (response: Response, fallback: string) => {
   const errorText = await response.text();
-  if (response.status === 401) {
-    throw new DriveAuthError();
-  }
   throw new Error(`${fallback}: ${errorText || response.statusText}`);
 };
 
