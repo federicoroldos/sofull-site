@@ -267,6 +267,37 @@ const getWebDeviceName = () => {
   return `${browser} on ${platform}`;
 };
 
+const toTimestampMs = (value: unknown) => {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value;
+  if (value instanceof Date) {
+    const parsed = value.getTime();
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+  if (!value || typeof value !== 'object') return null;
+
+  const withToMillis = value as { toMillis?: () => number };
+  if (typeof withToMillis.toMillis === 'function') {
+    try {
+      const parsed = withToMillis.toMillis();
+      if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    } catch {
+      // Ignore timestamp conversion failures.
+    }
+  }
+
+  const withSeconds = value as { seconds?: number; nanoseconds?: number };
+  if (typeof withSeconds.seconds === 'number' && Number.isFinite(withSeconds.seconds)) {
+    return withSeconds.seconds * 1000 + Math.floor((withSeconds.nanoseconds || 0) / 1_000_000);
+  }
+
+  return null;
+};
+
+const getRegistrationTimestampMs = (data: Record<string, unknown>) =>
+  toTimestampMs(data.lastRegistrationAt) ??
+  toTimestampMs(data.firstSeenAt) ??
+  toTimestampMs(data.createdAt);
+
 const shouldSendWebLoginEmail = async (uid: string) => {
   try {
     const db = getFirestore(firebaseApp);
@@ -274,13 +305,36 @@ const shouldSendWebLoginEmail = async (uid: string) => {
     const deviceRef = doc(db, 'users', uid, 'devices', deviceId);
     const existing = await getDoc(deviceRef);
     if (existing.exists()) {
-      return false;
+      const data = existing.data() as Record<string, unknown>;
+      const lastRegistrationAtMs = getRegistrationTimestampMs(data);
+      const isExpired =
+        lastRegistrationAtMs === null || Date.now() - lastRegistrationAtMs >= SESSION_DURATION_MS;
+
+      if (!isExpired) {
+        return false;
+      }
+
+      await setDoc(
+        deviceRef,
+        {
+          deviceName: getWebDeviceName(),
+          platform: 'web',
+          lastRegistrationAt: serverTimestamp()
+        },
+        { merge: true }
+      );
+      return true;
     }
-    await setDoc(deviceRef, {
-      deviceName: getWebDeviceName(),
-      platform: 'web',
-      createdAt: serverTimestamp()
-    });
+    await setDoc(
+      deviceRef,
+      {
+        deviceName: getWebDeviceName(),
+        platform: 'web',
+        firstSeenAt: serverTimestamp(),
+        lastRegistrationAt: serverTimestamp()
+      },
+      { merge: true }
+    );
     return true;
   } catch (err) {
     console.warn('Web device email gate failed.', err);
