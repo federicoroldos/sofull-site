@@ -168,11 +168,12 @@ const App = () => {
   const imageFolderIdRef = useRef<string | null>(null);
 
   const IS_NATIVE = Capacitor.isNativePlatform();
+  const IS_ANDROID = Capacitor.getPlatform() === 'android';
   const isLoggedIn = Boolean(user && (IS_NATIVE || accessToken));
   const resolveDriveToken = useCallback(
-    async (interactive = false) => {
+    async (interactive = false, requireDriveScope = false) => {
       if (!IS_NATIVE) return accessToken;
-      return await getAccessToken({ interactive, forceRefresh: false });
+      return await getAccessToken({ interactive, forceRefresh: false, requireDriveScope });
     },
     [IS_NATIVE, accessToken, getAccessToken]
   );
@@ -268,7 +269,7 @@ const App = () => {
   };
 
   const refreshList = async () => {
-    const token = await resolveDriveToken(true);
+    const token = await resolveDriveToken(true, IS_ANDROID);
     if (!token) return;
     setSyncState('loading');
     setSyncMessage('Refreshing from Google Drive...');
@@ -293,7 +294,7 @@ const App = () => {
   };
 
   const saveToDrive = async (nextEntries: SofullEntry[]) => {
-    const token = await resolveDriveToken(true);
+    const token = await resolveDriveToken(true, IS_ANDROID);
     if (!token) return;
     setSyncState('saving');
     setSyncMessage('Saving to Google Drive...');
@@ -319,7 +320,7 @@ const App = () => {
   };
 
   const ensureImageFolderId = async () => {
-    const token = await resolveDriveToken(true);
+    const token = await resolveDriveToken(true, IS_ANDROID);
     if (!token) {
       throw new Error('Google session expired. Sign in again and retry.');
     }
@@ -333,7 +334,7 @@ const App = () => {
   };
 
   const handleSaveEntry = async (values: EntryFormSubmitValues) => {
-    const token = await resolveDriveToken(true);
+    const token = await resolveDriveToken(true, IS_ANDROID);
     if (!token) {
       throw new Error('Google session expired. Sign in again before saving.');
     }
@@ -439,7 +440,7 @@ const App = () => {
     setEntries(nextEntries);
     void (async () => {
       await saveToDrive(nextEntries);
-      const token = await resolveDriveToken(true);
+      const token = await resolveDriveToken(true, IS_ANDROID);
       if (token && entry.imageDriveFileId) {
         try {
           await deleteDriveFile(token, entry.imageDriveFileId);
@@ -483,8 +484,14 @@ const App = () => {
 
     let cancelled = false;
     const load = async () => {
-      const token = await resolveDriveToken();
-      if (!token) return;
+      const token = await resolveDriveToken(IS_ANDROID, IS_ANDROID);
+      if (!token) {
+        if (!cancelled && IS_ANDROID) {
+          setSyncState('error');
+          setSyncMessage('Google Drive access is required to sync. Please allow access and try again.');
+        }
+        return;
+      }
       setSyncState('loading');
       setSyncMessage('Loading from Google Drive...');
       try {
@@ -511,7 +518,7 @@ const App = () => {
     return () => {
       cancelled = true;
     };
-  }, [isLoggedIn, resolveDriveToken]);
+  }, [IS_ANDROID, isLoggedIn, resolveDriveToken]);
 
   useEffect(() => {
     const activeIds = new Set(

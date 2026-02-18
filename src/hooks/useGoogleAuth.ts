@@ -16,11 +16,12 @@ import { doc, getDoc, getFirestore, serverTimestamp, setDoc } from 'firebase/fir
 import type { User } from 'firebase/auth';
 
 const provider = new GoogleAuthProvider();
+const BASIC_SCOPES = ['profile', 'email'];
 const DRIVE_SCOPES = [
   'https://www.googleapis.com/auth/drive.appdata',
   'https://www.googleapis.com/auth/drive.file'
 ];
-const GOOGLE_SCOPES = ['profile', 'email', ...DRIVE_SCOPES];
+const GOOGLE_SCOPES = [...BASIC_SCOPES, ...DRIVE_SCOPES];
 DRIVE_SCOPES.forEach((scope) => provider.addScope(scope));
 provider.setCustomParameters({ prompt: 'select_account consent' });
 
@@ -52,6 +53,7 @@ const GOOGLE_WEB_CLIENT_ID = import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID;
 const WEB_DEVICE_ID_KEY = 'sofull-web-device-id';
 const TOKEN_EXPIRY_POLL_MS = 10 * 1000;
 const IS_NATIVE = Capacitor.isNativePlatform();
+const IS_ANDROID = Capacitor.getPlatform() === 'android';
 let socialLoginInitialized = false;
 
 const ensureNativeSocialLogin = async () => {
@@ -409,6 +411,7 @@ export const useGoogleAuth = () => {
   const [tokenExpired, setTokenExpired] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [androidDriveScopeGranted, setAndroidDriveScopeGranted] = useState(true);
   const accessTokenRef = useRef<string | null>(stored.token);
   const accessTokenExpiresAtRef = useRef<number | null>(stored.expiresAt);
 
@@ -445,6 +448,36 @@ export const useGoogleAuth = () => {
     setTokenExpired(true);
   }, [applyAccessToken]);
 
+  const nativeSignInWithScopes = useCallback(
+    async (scopes: string[]) => {
+      await ensureNativeSocialLogin();
+      const response = await SocialLogin.login({
+        provider: 'google',
+        options: {
+          style: 'bottom',
+          scopes
+        }
+      });
+      if (response.provider !== 'google') {
+        throw new Error('Google sign-in failed.');
+      }
+      const result = response.result;
+      if (result.responseType !== 'online') {
+        throw new Error('Google sign-in did not return an access token.');
+      }
+      const nextAccessToken = result.accessToken?.token ?? null;
+      const idToken = result.idToken ?? null;
+      if (!idToken) {
+        throw new Error('Google sign-in did not return an ID token.');
+      }
+      const credential = GoogleAuthProvider.credential(idToken, nextAccessToken || undefined);
+      const authResult = await signInWithCredential(auth, credential);
+      applyAccessToken(nextAccessToken);
+      return { accessToken: nextAccessToken, user: authResult.user };
+    },
+    [applyAccessToken, auth]
+  );
+
   const refreshAccessToken = useCallback(
     async (options?: { interactive?: boolean; force?: boolean }) => {
       if (IS_NATIVE) {
@@ -452,9 +485,10 @@ export const useGoogleAuth = () => {
           try {
             await ensureNativeSocialLogin();
             try {
+              const scopes = IS_ANDROID && !androidDriveScopeGranted ? BASIC_SCOPES : GOOGLE_SCOPES;
               await SocialLogin.refresh({
                 provider: 'google',
-                options: { scopes: GOOGLE_SCOPES, forceRefreshToken: true }
+                options: { scopes, forceRefreshToken: true }
               });
             } catch {
               // Ignore refresh failures and fall back to authorization code.
@@ -484,16 +518,35 @@ export const useGoogleAuth = () => {
       }
       return accessTokenRef.current;
     },
-    [applyAccessToken]
+    [androidDriveScopeGranted, applyAccessToken]
   );
 
   const getAccessToken = useCallback(
-    async (options?: { interactive?: boolean; forceRefresh?: boolean }) => {
+    async (options?: { interactive?: boolean; forceRefresh?: boolean; requireDriveScope?: boolean }) => {
       const current = accessTokenRef.current;
       const expiresAt = accessTokenExpiresAtRef.current;
       const isExpired = Boolean(expiresAt && Date.now() >= expiresAt);
       if (!IS_NATIVE) return current;
       if (!user) return null;
+      const requiresDriveScope = Boolean(IS_ANDROID && options?.requireDriveScope);
+
+      if (requiresDriveScope && !androidDriveScopeGranted) {
+        if (!options?.interactive) {
+          return current;
+        }
+        try {
+          const result = await nativeSignInWithScopes(GOOGLE_SCOPES);
+          setAndroidDriveScopeGranted(true);
+          return result.accessToken;
+        } catch (err) {
+          const message =
+            err instanceof Error && err.message
+              ? err.message
+              : 'Google Drive permission is required to sync.';
+          setError(message);
+          return null;
+        }
+      }
 
       if (!options?.forceRefresh && current && !isExpired) {
         return current;
@@ -513,7 +566,7 @@ export const useGoogleAuth = () => {
 
       return current;
     },
-    [expireToken, refreshAccessToken, user]
+    [androidDriveScopeGranted, expireToken, nativeSignInWithScopes, refreshAccessToken, user]
   );
 
   const forceSessionLogout = useCallback(async (reason?: string) => {
@@ -530,6 +583,7 @@ export const useGoogleAuth = () => {
       updateSessionStart(null);
       setTokenExpired(false);
       setUser(null);
+      setAndroidDriveScopeGranted(true);
       setLoading(false);
       setError(reason || null);
     }
@@ -561,6 +615,7 @@ export const useGoogleAuth = () => {
       setAccessTokenExpiresAt(null);
       persistToken(null);
       updateSessionStart(null);
+      setAndroidDriveScopeGranted(true);
     });
     return () => {
       active = false;
@@ -614,30 +669,10 @@ export const useGoogleAuth = () => {
     setError(null);
     try {
       if (IS_NATIVE) {
-        await ensureNativeSocialLogin();
-        const response = await SocialLogin.login({
-          provider: 'google',
-          options: {
-            style: 'bottom',
-            scopes: GOOGLE_SCOPES
-          }
-        });
-        if (response.provider !== 'google') {
-          throw new Error('Google sign-in failed.');
-        }
-        const result = response.result;
-        if (result.responseType !== 'online') {
-          throw new Error('Google sign-in did not return an access token.');
-        }
-        const accessToken = result.accessToken?.token ?? null;
-        const idToken = result.idToken ?? null;
-        if (!idToken) {
-          throw new Error('Google sign-in did not return an ID token.');
-        }
-        const credential = GoogleAuthProvider.credential(idToken, accessToken || undefined);
-        const authResult = await signInWithCredential(auth, credential);
-        applyAccessToken(accessToken);
+        const loginScopes = IS_ANDROID ? BASIC_SCOPES : GOOGLE_SCOPES;
+        const authResult = await nativeSignInWithScopes(loginScopes);
         updateSessionStart(Date.now());
+        setAndroidDriveScopeGranted(!IS_ANDROID);
         void notifyAuthEmail(authResult.user);
         return;
       }
@@ -664,6 +699,7 @@ export const useGoogleAuth = () => {
       await signOut(auth);
       applyAccessToken(null);
       updateSessionStart(null);
+      setAndroidDriveScopeGranted(true);
       setError(null);
       setTokenExpired(false);
     } finally {
