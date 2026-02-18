@@ -618,6 +618,7 @@ export const useGoogleAuth = () => {
         const response = await SocialLogin.login({
           provider: 'google',
           options: {
+            style: 'bottom',
             scopes: GOOGLE_SCOPES
           }
         });
