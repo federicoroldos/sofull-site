@@ -462,7 +462,7 @@ const App = () => {
   }, []);
 
   useEffect(() => {
-    if (!accessToken && !IS_NATIVE) {
+    if (!isLoggedIn) {
       const resetStateTimer = window.setTimeout(() => {
         setEntries([]);
         setDriveFileId('');
@@ -511,7 +511,7 @@ const App = () => {
     return () => {
       cancelled = true;
     };
-  }, [IS_NATIVE, accessToken, resolveDriveToken]);
+  }, [isLoggedIn, resolveDriveToken]);
 
   useEffect(() => {
     const activeIds = new Set(
