@@ -254,10 +254,39 @@ const normalizeClientValue = (value) => {
   return trimmed.replace(/\s+/g, ' ').slice(0, 120);
 };
 
+const DEVICE_MANUFACTURER_CASE_MAP = {
+  acer: 'Acer',
+  apple: 'Apple',
+  asus: 'ASUS',
+  google: 'Google',
+  honor: 'HONOR',
+  huawei: 'Huawei',
+  infinix: 'Infinix',
+  iqoo: 'iQOO',
+  itel: 'itel',
+  lenovo: 'Lenovo',
+  lg: 'LG',
+  meizu: 'Meizu',
+  motorola: 'Motorola',
+  nokia: 'Nokia',
+  nothing: 'Nothing',
+  oneplus: 'OnePlus',
+  oppo: 'OPPO',
+  poco: 'POCO',
+  realme: 'realme',
+  redmi: 'Redmi',
+  samsung: 'Samsung',
+  sony: 'Sony',
+  tecno: 'TECNO',
+  vivo: 'vivo',
+  xiaomi: 'Xiaomi',
+  zte: 'ZTE'
+};
+
 const normalizeDeviceManufacturer = (value) => {
   const normalized = normalizeClientValue(value);
   if (!normalized || /^(unknown|null|undefined)$/i.test(normalized)) return null;
-  return normalized;
+  return DEVICE_MANUFACTURER_CASE_MAP[normalized.toLowerCase()] || normalized;
 };
 
 const normalizeBrowserName = (value) => {

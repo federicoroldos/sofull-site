@@ -37,6 +37,34 @@ const IS_NATIVE = Capacitor.isNativePlatform();
 const NATIVE_PLATFORM = Capacitor.getPlatform();
 const TABLET_MIN_SHORT_SIDE = 768;
 const MAX_METADATA_LENGTH = 120;
+const DEVICE_MANUFACTURER_CASE_MAP: Record<string, string> = {
+  acer: 'Acer',
+  apple: 'Apple',
+  asus: 'ASUS',
+  google: 'Google',
+  honor: 'HONOR',
+  huawei: 'Huawei',
+  infinix: 'Infinix',
+  iqoo: 'iQOO',
+  itel: 'itel',
+  lenovo: 'Lenovo',
+  lg: 'LG',
+  meizu: 'Meizu',
+  motorola: 'Motorola',
+  nokia: 'Nokia',
+  nothing: 'Nothing',
+  oneplus: 'OnePlus',
+  oppo: 'OPPO',
+  poco: 'POCO',
+  realme: 'realme',
+  redmi: 'Redmi',
+  samsung: 'Samsung',
+  sony: 'Sony',
+  tecno: 'TECNO',
+  vivo: 'vivo',
+  xiaomi: 'Xiaomi',
+  zte: 'ZTE'
+};
 
 let clientDeviceMetadataPromise: Promise<ClientDeviceMetadata> | null = null;
 let androidCatalogPromise: Promise<Record<string, string>> | null = null;
@@ -101,7 +129,7 @@ const normalizeManufacturer = (value?: string | null) => {
   const normalized = normalizeText(value);
   if (!normalized) return null;
   if (/^(unknown|null|undefined)$/i.test(normalized)) return null;
-  return normalized;
+  return DEVICE_MANUFACTURER_CASE_MAP[normalized.toLowerCase()] ?? normalized;
 };
 
 const getViewportShortestSide = () => {
