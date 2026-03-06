@@ -1,8 +1,6 @@
 ﻿import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import aos from '@naverpay/device-info/aos';
-import ios from '@naverpay/device-info/ios';
 
 const BRAND_NAME = '배불러! (So Full!)';
 const BRAND_TAGLINE = 'Your food logging and rating site';
@@ -51,9 +49,25 @@ const SENSITIVE_PATTERNS = [
 ];
 const RATE_LIMIT_STORE = new Map();
 const RATE_LIMIT_STORE_MAX = 2000;
+let androidCatalogPromise = null;
+let iosCatalogPromise = null;
 
 const toFiniteNumber = (value) =>
   typeof value === 'number' && Number.isFinite(value) ? value : null;
+
+const loadAndroidCatalog = () => {
+  if (!androidCatalogPromise) {
+    androidCatalogPromise = import('@naverpay/device-info/aos').then((module) => module.default);
+  }
+  return androidCatalogPromise;
+};
+
+const loadIosCatalog = () => {
+  if (!iosCatalogPromise) {
+    iosCatalogPromise = import('@naverpay/device-info/ios').then((module) => module.default);
+  }
+  return iosCatalogPromise;
+};
 
 const escapeHtml = (value) =>
   String(value ?? '')
@@ -377,29 +391,31 @@ const formatModelName = ({ deviceManufacturer, deviceModel }) => {
   return normalizedModel;
 };
 
-const mapToMarketingName = ({ deviceModel, os }) => {
+const mapToMarketingName = async ({ deviceModel, os }) => {
   const normalizedModel = normalizeDeviceModel(deviceModel);
   if (!normalizedModel) return null;
 
   if (os === 'Android') {
+    const androidCatalog = await loadAndroidCatalog();
     const candidates = [
       normalizedModel,
       normalizedModel.toUpperCase(),
       normalizedModel.replace(/^samsung\s+/i, '').toUpperCase()
     ];
     for (const candidate of candidates) {
-      if (aos[candidate]) return aos[candidate];
+      if (androidCatalog[candidate]) return androidCatalog[candidate];
     }
   }
 
   if (os === 'iOS') {
+    const iosCatalog = await loadIosCatalog();
     const candidates = [
       normalizedModel,
       normalizedModel.replace(/\s+/g, ''),
       normalizedModel.replace(/\s+/g, '').replace(/^apple/i, '')
     ];
     for (const candidate of candidates) {
-      if (ios[candidate]) return ios[candidate];
+      if (iosCatalog[candidate]) return iosCatalog[candidate];
     }
   }
 
@@ -433,9 +449,16 @@ const formatGenericDeviceName = ({ deviceType, os, deviceFallback }) => {
   return deviceFallback || null;
 };
 
-const formatDeviceLabel = ({ deviceManufacturer, deviceModel, os, deviceType, deviceFallback }) => {
+const formatDeviceLabel = async ({
+  deviceManufacturer,
+  deviceModel,
+  os,
+  deviceType,
+  deviceFallback
+}) => {
   const namedModel =
-    mapToMarketingName({ deviceModel, os }) || formatModelName({ deviceManufacturer, deviceModel });
+    (await mapToMarketingName({ deviceModel, os })) ||
+    formatModelName({ deviceManufacturer, deviceModel });
   if (namedModel) return namedModel;
   const genericDeviceName = formatGenericDeviceName({ deviceType, os, deviceFallback });
   if (genericDeviceName) return genericDeviceName;
@@ -1226,7 +1249,7 @@ export default async function handler(req, res) {
     const loginTimestamp = formatTimestamp(authTimeMs || now, locale, timeZone);
 
     const requestMeta = getRequestMeta(req);
-    const deviceLabel = formatDeviceLabel({
+    const deviceLabel = await formatDeviceLabel({
       deviceManufacturer: requestMeta.deviceManufacturer,
       deviceModel: requestMeta.deviceModel,
       os: requestMeta.os,

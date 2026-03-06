@@ -114,8 +114,6 @@ interface DriveFileMetadata {
   id: string;
   name: string;
   mimeType: string;
-  thumbnailLink?: string;
-  webViewLink?: string;
 }
 
 export const ensureFolder = async (token: string, name: string, parentId?: string) => {
@@ -192,7 +190,7 @@ export const uploadFileMultipart = async (
   );
 
   const uploadResponse = await fetch(
-    `${UPLOAD_URL}?uploadType=multipart&fields=id,name,mimeType,thumbnailLink,webViewLink`,
+    `${UPLOAD_URL}?uploadType=multipart&fields=id,name,mimeType`,
     {
       method: 'POST',
       headers: {
