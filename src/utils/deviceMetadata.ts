@@ -39,10 +39,8 @@ const TABLET_MIN_SHORT_SIDE = 768;
 const MAX_METADATA_LENGTH = 120;
 
 let clientDeviceMetadataPromise: Promise<ClientDeviceMetadata> | null = null;
-let deviceCatalogPromise: Promise<{
-  aos: Record<string, string>;
-  ios: Record<string, string>;
-}> | null = null;
+let androidCatalogPromise: Promise<Record<string, string>> | null = null;
+let iosCatalogPromise: Promise<Record<string, string>> | null = null;
 
 const normalizeText = (value?: string | null) => {
   const trimmed = String(value ?? '').trim().replace(/\s+/g, ' ');
@@ -213,18 +211,18 @@ const formatModelName = (manufacturer?: string | null, model?: string | null) =>
   return normalizedModel ?? null;
 };
 
-const loadDeviceCatalog = () => {
-  if (!deviceCatalogPromise) {
-    deviceCatalogPromise = Promise.all([
-      import('@naverpay/device-info/aos'),
-      import('@naverpay/device-info/ios')
-    ]).then(([aosModule, iosModule]) => ({
-      aos: aosModule.default,
-      ios: iosModule.default
-    }));
+const loadAndroidCatalog = () => {
+  if (!androidCatalogPromise) {
+    androidCatalogPromise = import('@naverpay/device-info/aos').then((module) => module.default);
   }
+  return androidCatalogPromise;
+};
 
-  return deviceCatalogPromise;
+const loadIosCatalog = () => {
+  if (!iosCatalogPromise) {
+    iosCatalogPromise = import('@naverpay/device-info/ios').then((module) => module.default);
+  }
+  return iosCatalogPromise;
 };
 
 const mapToMarketingName = async ({
@@ -238,9 +236,8 @@ const mapToMarketingName = async ({
   if (!normalizedModel) return null;
 
   try {
-    const { aos, ios } = await loadDeviceCatalog();
-
     if (os === 'Android') {
+      const androidCatalog = await loadAndroidCatalog();
       const candidates = [
         normalizedModel,
         normalizedModel.toUpperCase(),
@@ -249,11 +246,12 @@ const mapToMarketingName = async ({
       ];
 
       for (const candidate of candidates) {
-        if (aos[candidate]) return aos[candidate];
+        if (androidCatalog[candidate]) return androidCatalog[candidate];
       }
     }
 
     if (os === 'iOS') {
+      const iosCatalog = await loadIosCatalog();
       const candidates = [
         normalizedModel,
         normalizedModel.replace(/\s+/g, ''),
@@ -261,7 +259,7 @@ const mapToMarketingName = async ({
       ];
 
       for (const candidate of candidates) {
-        if (ios[candidate]) return ios[candidate];
+        if (iosCatalog[candidate]) return iosCatalog[candidate];
       }
     }
   } catch {
