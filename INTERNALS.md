@@ -38,10 +38,14 @@ Server (email API) variables:
 Frontend (GitHub Pages):
 - Build in GitHub Actions with `VITE_AUTH_EMAIL_ENDPOINT` pointing to the Vercel API URL.
 - Example: `VITE_AUTH_EMAIL_ENDPOINT=https://sofull-site.vercel.app/api/auth-email`
+- `public/CNAME` is set to `sofull.site`, so the custom apex domain belongs on GitHub Pages, not on the Vercel project.
 
 Email API (Vercel):
+- `vercel.json` disables framework auto-detection, skips frontend builds, and redirects every non-`/api/*` request to `https://sofull.site`.
 - Set `CORS_ORIGINS=https://sofull.site` (and optionally the Vercel domain).
 - Keep all email secrets in Vercel Environment Variables only.
+- Do not attach `sofull.site` to the Vercel project if you keep the redirect above, or you will create a redirect loop. Use the generated `*.vercel.app` domain or a dedicated API subdomain such as `api.sofull.site`.
+- If you switch the API to `api.sofull.site`, keep `VITE_AUTH_EMAIL_ENDPOINT` aligned with that origin and note that the frontend CSP already allows it.
 
 ## Local Setup
 
