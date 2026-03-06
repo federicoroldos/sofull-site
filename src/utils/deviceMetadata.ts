@@ -34,10 +34,15 @@ export type ClientDeviceMetadata = {
 };
 
 const IS_NATIVE = Capacitor.isNativePlatform();
+const NATIVE_PLATFORM = Capacitor.getPlatform();
 const TABLET_MIN_SHORT_SIDE = 768;
 const MAX_METADATA_LENGTH = 120;
 
 let clientDeviceMetadataPromise: Promise<ClientDeviceMetadata> | null = null;
+let deviceCatalogPromise: Promise<{
+  aos: Record<string, string>;
+  ios: Record<string, string>;
+}> | null = null;
 
 const normalizeText = (value?: string | null) => {
   const trimmed = String(value ?? '').trim().replace(/\s+/g, ' ');
@@ -208,6 +213,64 @@ const formatModelName = (manufacturer?: string | null, model?: string | null) =>
   return normalizedModel ?? null;
 };
 
+const loadDeviceCatalog = () => {
+  if (!deviceCatalogPromise) {
+    deviceCatalogPromise = Promise.all([
+      import('@naverpay/device-info/aos'),
+      import('@naverpay/device-info/ios')
+    ]).then(([aosModule, iosModule]) => ({
+      aos: aosModule.default,
+      ios: iosModule.default
+    }));
+  }
+
+  return deviceCatalogPromise;
+};
+
+const mapToMarketingName = async ({
+  model,
+  os
+}: {
+  model?: string | null;
+  os?: string | null;
+}) => {
+  const normalizedModel = normalizeDeviceModel(model);
+  if (!normalizedModel) return null;
+
+  try {
+    const { aos, ios } = await loadDeviceCatalog();
+
+    if (os === 'Android') {
+      const candidates = [
+        normalizedModel,
+        normalizedModel.toUpperCase(),
+        normalizedModel.replace(/^samsung\s+/i, '').toUpperCase(),
+        normalizedModel.replace(/^[^a-z0-9]+/i, '').toUpperCase()
+      ];
+
+      for (const candidate of candidates) {
+        if (aos[candidate]) return aos[candidate];
+      }
+    }
+
+    if (os === 'iOS') {
+      const candidates = [
+        normalizedModel,
+        normalizedModel.replace(/\s+/g, ''),
+        normalizedModel.replace(/\s+/g, '').replace(/^apple/i, '')
+      ];
+
+      for (const candidate of candidates) {
+        if (ios[candidate]) return ios[candidate];
+      }
+    }
+  } catch {
+    // Ignore catalog lookup failures and fall back to the raw model.
+  }
+
+  return null;
+};
+
 const formatGenericDeviceName = ({
   deviceType,
   os
@@ -304,16 +367,25 @@ const resolveOs = ({
   inferOsFromUserAgent(userAgent, touchPoints);
 
 const resolveBrowser = ({
+  nativeInfo,
   userAgent,
   userAgentData
 }: {
+  nativeInfo: DeviceInfo | null;
   userAgent: string;
   userAgentData: HighEntropyValues | null;
-}) =>
-  normalizeBrowserName(
+}) => {
+  if (IS_NATIVE) {
+    if (nativeInfo?.platform === 'android' || NATIVE_PLATFORM === 'android') return 'Android app';
+    if (nativeInfo?.platform === 'ios' || NATIVE_PLATFORM === 'ios') return 'iOS app';
+    return 'Mobile app';
+  }
+
+  return normalizeBrowserName(
     inferBrowserFromBrands(userAgentData?.fullVersionList || userAgentData?.brands) ??
       inferBrowserFromUserAgent(userAgent)
   );
+};
 
 const resolveDeviceModel = ({
   nativeInfo,
@@ -351,9 +423,10 @@ const collectClientDeviceMetadata = async (): Promise<ClientDeviceMetadata> => {
   const [nativeInfo, userAgentData] = await Promise.all([getNativeDeviceInfo(), getUserAgentData()]);
 
   const os = resolveOs({ nativeInfo, touchPoints, userAgent, userAgentData });
-  const browser = resolveBrowser({ userAgent, userAgentData });
+  const browser = resolveBrowser({ nativeInfo, userAgent, userAgentData });
   const deviceManufacturer = resolveDeviceManufacturer(nativeInfo);
-  const deviceModel = resolveDeviceModel({ nativeInfo, touchPoints, userAgent, userAgentData });
+  const detectedDeviceModel = resolveDeviceModel({ nativeInfo, touchPoints, userAgent, userAgentData });
+  const deviceModel = (await mapToMarketingName({ model: detectedDeviceModel, os })) ?? detectedDeviceModel;
   const deviceType = normalizeDeviceType(
     inferDeviceType({
       mobileHint: userAgentData?.mobile,

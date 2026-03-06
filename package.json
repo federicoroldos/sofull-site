@@ -19,6 +19,7 @@
     "@capacitor/core": "^8.0.2",
     "@capacitor/device": "^8.0.1",
     "@capgo/capacitor-social-login": "^8.2.24",
+    "@naverpay/device-info": "^1.1.0",
     "firebase": "^12.8.0",
     "firebase-admin": "^13.6.1",
     "react": "^19.2.0",
