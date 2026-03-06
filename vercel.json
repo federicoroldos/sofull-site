@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": null,
+  "redirects": [
+    {
+      "source": "/:path((?!api/).*)",
+      "destination": "https://sofull.site/:path*",
+      "permanent": false
+    }
+  ]
+}
