@@ -14,6 +14,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, getFirestore, serverTimestamp, setDoc } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
+import { getClientDeviceHeaders, getClientDeviceMetadata } from '../utils/deviceMetadata';
 
 const provider = new GoogleAuthProvider();
 const BASIC_SCOPES = ['profile', 'email'];
@@ -199,48 +200,6 @@ const persistToken = (token: string | null) => {
   }
 };
 
-const normalizeDeviceModel = (value?: string | null) => {
-  const trimmed = value?.trim();
-  if (!trimmed) return null;
-  return trimmed.replace(/\s+/g, ' ');
-};
-
-const extractAndroidModel = (userAgent: string) => {
-  const match = userAgent.match(/Android[^;]*;\s*([^;)]+)(?:\sBuild|\)|;)/i);
-  if (!match) return null;
-  const raw = match[1].replace(/\s*Build.*$/i, '').trim();
-  if (!raw || /^(mobile|tablet)$/i.test(raw)) return null;
-  return raw;
-};
-
-const getClientDeviceModel = async () => {
-  const nav = navigator as Navigator & {
-    userAgentData?: { getHighEntropyValues?: (hints: string[]) => Promise<{ model?: string }> };
-  };
-
-  if (nav.userAgentData?.getHighEntropyValues) {
-    try {
-      const data = await nav.userAgentData.getHighEntropyValues(['model']);
-      const model = normalizeDeviceModel(data?.model);
-      if (model) return model;
-    } catch {
-      // Ignore UA data failures and fall back to UA parsing.
-    }
-  }
-
-  const ua = navigator.userAgent || '';
-  if (!ua) return null;
-
-  if (/android/i.test(ua)) {
-    const model = normalizeDeviceModel(extractAndroidModel(ua));
-    if (model) return model;
-  }
-
-  if (/iphone/i.test(ua)) return 'iPhone';
-  if (/ipad/i.test(ua)) return 'iPad';
-  return null;
-};
-
 const getOrCreateWebDeviceId = () => {
   try {
     const existing = localStorage.getItem(WEB_DEVICE_ID_KEY);
@@ -255,18 +214,6 @@ const getOrCreateWebDeviceId = () => {
       ? globalThis.crypto.randomUUID()
       : `web-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   }
-};
-
-const getWebDeviceName = () => {
-  const ua = navigator.userAgent || '';
-  const platform = navigator.platform || 'Unknown platform';
-  let browser = 'Browser';
-  if (/Edg\//.test(ua)) browser = 'Edge';
-  else if (/OPR\//.test(ua)) browser = 'Opera';
-  else if (/Chrome\//.test(ua)) browser = 'Chrome';
-  else if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) browser = 'Safari';
-  else if (/Firefox\//.test(ua)) browser = 'Firefox';
-  return `${browser} on ${platform}`;
 };
 
 const toTimestampMs = (value: unknown) => {
@@ -332,6 +279,8 @@ const markLocalWebDeviceGate = (uid: string, deviceId: string) => {
 
 const shouldSendWebLoginEmail = async (uid: string) => {
   const deviceId = getOrCreateWebDeviceId();
+  const deviceMetadata = await getClientDeviceMetadata();
+  const deviceName = deviceMetadata.label || deviceMetadata.browser || 'Unknown device';
   try {
     const db = getFirestore(firebaseApp);
     const deviceRef = doc(db, 'users', uid, 'devices', deviceId);
@@ -349,7 +298,7 @@ const shouldSendWebLoginEmail = async (uid: string) => {
       await setDoc(
         deviceRef,
         {
-          deviceName: getWebDeviceName(),
+          deviceName,
           platform: 'web',
           lastRegistrationAt: serverTimestamp()
         },
@@ -360,7 +309,7 @@ const shouldSendWebLoginEmail = async (uid: string) => {
     await setDoc(
       deviceRef,
       {
-        deviceName: getWebDeviceName(),
+        deviceName,
         platform: 'web',
         firstSeenAt: serverTimestamp(),
         lastRegistrationAt: serverTimestamp()
@@ -390,8 +339,7 @@ const notifyAuthEmail = async (user: User) => {
     const headers: Record<string, string> = { Authorization: `Bearer ${idToken}` };
     if (timezone) headers['X-Client-Timezone'] = timezone;
     if (locale) headers['X-Client-Locale'] = locale;
-    const deviceModel = await getClientDeviceModel();
-    if (deviceModel) headers['X-Client-Device-Model'] = deviceModel;
+    Object.assign(headers, await getClientDeviceHeaders());
     await fetch(AUTH_EMAIL_ENDPOINT, {
       method: 'POST',
       headers

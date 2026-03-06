@@ -30,7 +30,8 @@ The app calls a serverless endpoint (`api/auth-email`) to send:
 - A welcome email on first sign-in.
 - A login notification email on subsequent sign-ins.
 
-Login emails include sign-in time, device name/model when available, device/browser, and approximate city/country.
+Login emails include sign-in time, browser, approximate city/country, and a best-effort device label built from the client device model, OS, and device type when the platform exposes that metadata.
+Examples: `Galaxy Tab S7 (Android Tablet)`, `iPhone (iOS Mobile)`, `Windows (Desktop)`.
 
 ## Hosting
 

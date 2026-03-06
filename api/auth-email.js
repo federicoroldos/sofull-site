@@ -224,45 +224,160 @@ const sendError = (res, status, message) => {
   res.status(status).json({ error: message });
 };
 
-const parseUserAgent = (userAgent) => {
-  if (!userAgent) {
-    return { browser: null, device: null, os: null, deviceType: null };
-  }
-  const ua = userAgent.toLowerCase();
-  let browser = null;
-
-  if (ua.includes('edg/')) browser = 'Edge';
-  else if (ua.includes('opr/') || ua.includes('opera/')) browser = 'Opera';
-  else if (ua.includes('chrome/') && !ua.includes('chromium')) browser = 'Chrome';
-  else if (ua.includes('firefox/')) browser = 'Firefox';
-  else if (ua.includes('safari/') && ua.includes('version/')) browser = 'Safari';
-
-  let os = null;
-  if (ua.includes('windows nt')) os = 'Windows';
-  else if (ua.includes('iphone') || ua.includes('ipad')) os = 'iOS';
-  else if (ua.includes('android')) os = 'Android';
-  else if (ua.includes('mac os x')) os = 'macOS';
-  else if (ua.includes('linux')) os = 'Linux';
-
-  let deviceType = 'Desktop';
-  if (ua.includes('tablet') || ua.includes('ipad')) deviceType = 'Tablet';
-  else if (ua.includes('mobile')) deviceType = 'Mobile';
-
-  const device = os ? `${os} (${deviceType})` : deviceType;
-
-  return { browser, device, os, deviceType };
-};
-
 const normalizeDeviceModel = (value) => {
   const trimmed = String(value ?? '').trim();
   if (!trimmed) return null;
-  return trimmed.replace(/\s+/g, ' ');
+  const normalized = trimmed.replace(/\s+/g, ' ');
+  if (/^(unknown|generic|device|null|undefined)$/i.test(normalized)) return null;
+  return normalized.slice(0, 120);
 };
 
-const formatDeviceLabel = ({ deviceModel, os, deviceType, deviceFallback }) => {
-  const base = [os, deviceType].filter(Boolean).join(' ');
+const normalizeClientValue = (value) => {
+  const trimmed = String(value ?? '').trim();
+  if (!trimmed) return null;
+  return trimmed.replace(/\s+/g, ' ').slice(0, 120);
+};
+
+const normalizeDeviceManufacturer = (value) => {
+  const normalized = normalizeClientValue(value);
+  if (!normalized || /^(unknown|null|undefined)$/i.test(normalized)) return null;
+  return normalized;
+};
+
+const normalizeBrowserName = (value) => {
+  const normalized = normalizeClientValue(value)?.toLowerCase();
+  if (!normalized) return null;
+  if (normalized.includes('edge')) return 'Edge';
+  if (normalized.includes('samsung internet')) return 'Samsung Internet';
+  if (normalized.includes('opera')) return 'Opera';
+  if (normalized.includes('firefox')) return 'Firefox';
+  if (normalized.includes('chrome')) return 'Chrome';
+  if (normalized.includes('safari')) return 'Safari';
+  if (normalized.includes('webview')) return 'WebView';
+  return normalizeClientValue(value);
+};
+
+const normalizeOsName = (value) => {
+  const normalized = normalizeClientValue(value)?.toLowerCase();
+  if (!normalized) return null;
+  if (normalized === 'ios' || normalized === 'ipados' || normalized === 'ipad os') return 'iOS';
+  if (normalized === 'android') return 'Android';
+  if (normalized === 'windows') return 'Windows';
+  if (normalized === 'mac' || normalized === 'macos' || normalized === 'mac os') return 'macOS';
+  if (normalized === 'linux') return 'Linux';
+  if (normalized === 'chrome os' || normalized === 'chromeos' || normalized === 'cros') {
+    return 'ChromeOS';
+  }
+  return normalizeClientValue(value);
+};
+
+const normalizeDeviceType = (value) => {
+  const normalized = normalizeClientValue(value)?.toLowerCase();
+  if (!normalized) return null;
+  if (normalized === 'mobile' || normalized === 'phone') return 'Mobile';
+  if (normalized === 'tablet') return 'Tablet';
+  if (normalized === 'desktop' || normalized === 'laptop' || normalized === 'computer') {
+    return 'Desktop';
+  }
+  if (normalized === 'tv' || normalized === 'smarttv' || normalized === 'smart tv') return 'TV';
+  if (normalized === 'wearable' || normalized === 'watch') return 'Wearable';
+  if (normalized === 'console') return 'Console';
+  if (normalized === 'xr' || normalized === 'vr' || normalized === 'ar') return 'XR';
+  return normalizeClientValue(value);
+};
+
+const buildDeviceFallback = ({ os, deviceType }) => {
+  const parts = [os, deviceType].filter(Boolean);
+  if (!parts.length) return null;
+  if (parts.length === 1) return parts[0];
+  return `${parts[0]} (${parts[1]})`;
+};
+
+const extractAndroidModel = (userAgent) => {
+  const match = String(userAgent || '').match(
+    /Android[^;)]*;\s*([^;)]+?)(?:\sBuild\/[^;)]*)?(?:;|\))/i
+  );
+  if (!match) return null;
+  const model = normalizeDeviceModel(match[1]);
+  if (!model || /^(mobile|tablet)$/i.test(model)) return null;
+  return model;
+};
+
+const parseUserAgent = (userAgent) => {
+  if (!userAgent) {
+    return { browser: null, device: null, deviceModel: null, os: null, deviceType: null };
+  }
+
+  const ua = userAgent.toLowerCase();
+  let browser = null;
+  if (ua.includes('edga') || ua.includes('edgios') || ua.includes('edg/')) browser = 'Edge';
+  else if (ua.includes('samsungbrowser')) browser = 'Samsung Internet';
+  else if (ua.includes('opr/') || ua.includes('opera')) browser = 'Opera';
+  else if (ua.includes('firefox') || ua.includes('fxios')) browser = 'Firefox';
+  else if ((ua.includes('crios') || ua.includes('chrome')) && !ua.includes('chromium')) {
+    browser = 'Chrome';
+  } else if (ua.includes('safari') && !ua.includes('chrome') && !ua.includes('android')) {
+    browser = 'Safari';
+  } else if (ua.includes('wv')) {
+    browser = 'WebView';
+  }
+
+  let os = null;
+  if (ua.includes('android')) os = 'Android';
+  else if (ua.includes('iphone') || ua.includes('ipod') || ua.includes('ipad')) os = 'iOS';
+  else if (ua.includes('cros')) os = 'ChromeOS';
+  else if (ua.includes('windows nt')) os = 'Windows';
+  else if (ua.includes('mac os x') || ua.includes('macintosh')) os = 'macOS';
+  else if (ua.includes('linux')) os = 'Linux';
+
+  let deviceType = 'Desktop';
+  if (
+    ua.includes('smart-tv') ||
+    ua.includes('smarttv') ||
+    ua.includes('googletv') ||
+    ua.includes('appletv')
+  ) {
+    deviceType = 'TV';
+  } else if (ua.includes('watch')) {
+    deviceType = 'Wearable';
+  } else if (ua.includes('ipad') || ua.includes('tablet') || ua.includes('playbook') || ua.includes('silk')) {
+    deviceType = 'Tablet';
+  } else if (ua.includes('mobile') || ua.includes('iphone') || ua.includes('ipod') || ua.includes('phone')) {
+    deviceType = 'Mobile';
+  } else if (ua.includes('android')) {
+    deviceType = 'Tablet';
+  }
+
+  let deviceModel = null;
+  if (ua.includes('android')) deviceModel = extractAndroidModel(userAgent);
+  else if (ua.includes('iphone') || ua.includes('ipod')) deviceModel = 'iPhone';
+  else if (ua.includes('ipad')) deviceModel = 'iPad';
+
+  return {
+    browser,
+    device: buildDeviceFallback({ os, deviceType }),
+    deviceModel,
+    os,
+    deviceType
+  };
+};
+
+const formatModelName = ({ deviceManufacturer, deviceModel }) => {
+  const normalizedManufacturer = normalizeDeviceManufacturer(deviceManufacturer);
   const normalizedModel = normalizeDeviceModel(deviceModel);
-  const namedModel = normalizedModel;
+  if (normalizedManufacturer && normalizedModel) {
+    if (normalizedModel.toLowerCase().startsWith(normalizedManufacturer.toLowerCase())) {
+      return normalizedModel;
+    }
+    if (normalizedManufacturer.toLowerCase() === 'apple') return normalizedModel;
+    return `${normalizedManufacturer} ${normalizedModel}`;
+  }
+  return normalizedModel;
+};
+
+const formatDeviceLabel = ({ deviceManufacturer, deviceModel, os, deviceType, deviceFallback }) => {
+  const base = [os, deviceType].filter(Boolean).join(' ');
+  const namedModel = formatModelName({ deviceManufacturer, deviceModel });
 
   if (namedModel && base) return `${namedModel} (${base})`;
   if (namedModel) return namedModel;
@@ -307,8 +422,13 @@ const formatTimestamp = (timestampMs, locale, timeZone) => {
 
 const getRequestMeta = (req) => {
   const userAgent = getHeader(req, 'user-agent');
-  const { browser, device, os, deviceType } = parseUserAgent(userAgent);
-  const deviceModel = getHeader(req, 'x-client-device-model');
+  const parsed = parseUserAgent(userAgent);
+  const browser = normalizeBrowserName(getHeader(req, 'x-client-browser')) || parsed.browser;
+  const os = normalizeOsName(getHeader(req, 'x-client-os')) || parsed.os;
+  const deviceType = normalizeDeviceType(getHeader(req, 'x-client-device-type')) || parsed.deviceType;
+  const deviceModel = normalizeDeviceModel(getHeader(req, 'x-client-device-model')) || parsed.deviceModel;
+  const deviceManufacturer = normalizeDeviceManufacturer(getHeader(req, 'x-client-device-manufacturer'));
+  const device = buildDeviceFallback({ os, deviceType }) || parsed.device;
 
   const city = getHeader(req, 'x-vercel-ip-city') || getHeader(req, 'x-appengine-city');
   const country =
@@ -322,7 +442,8 @@ const getRequestMeta = (req) => {
     device,
     os,
     deviceType,
-    deviceModel: deviceModel || null,
+    deviceManufacturer,
+    deviceModel,
     city: city || null,
     country: country || null
   };
@@ -923,7 +1044,17 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader(
     'Access-Control-Allow-Headers',
-    'Authorization, Content-Type, X-Client-Timezone, X-Client-Locale, X-Client-Device-Model'
+    [
+      'Authorization',
+      'Content-Type',
+      'X-Client-Timezone',
+      'X-Client-Locale',
+      'X-Client-Browser',
+      'X-Client-Device-Manufacturer',
+      'X-Client-Device-Model',
+      'X-Client-Device-Type',
+      'X-Client-OS'
+    ].join(', ')
   );
   res.setHeader('Cache-Control', 'no-store');
 
@@ -1040,6 +1171,7 @@ export default async function handler(req, res) {
 
     const requestMeta = getRequestMeta(req);
     const deviceLabel = formatDeviceLabel({
+      deviceManufacturer: requestMeta.deviceManufacturer,
       deviceModel: requestMeta.deviceModel,
       os: requestMeta.os,
       deviceType: requestMeta.deviceType,
