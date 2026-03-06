@@ -1,6 +1,8 @@
 ﻿import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import aos from '@naverpay/device-info/aos';
+import ios from '@naverpay/device-info/ios';
 
 const BRAND_NAME = '배불러! (So Full!)';
 const BRAND_TAGLINE = 'Your food logging and rating site';
@@ -375,6 +377,35 @@ const formatModelName = ({ deviceManufacturer, deviceModel }) => {
   return normalizedModel;
 };
 
+const mapToMarketingName = ({ deviceModel, os }) => {
+  const normalizedModel = normalizeDeviceModel(deviceModel);
+  if (!normalizedModel) return null;
+
+  if (os === 'Android') {
+    const candidates = [
+      normalizedModel,
+      normalizedModel.toUpperCase(),
+      normalizedModel.replace(/^samsung\s+/i, '').toUpperCase()
+    ];
+    for (const candidate of candidates) {
+      if (aos[candidate]) return aos[candidate];
+    }
+  }
+
+  if (os === 'iOS') {
+    const candidates = [
+      normalizedModel,
+      normalizedModel.replace(/\s+/g, ''),
+      normalizedModel.replace(/\s+/g, '').replace(/^apple/i, '')
+    ];
+    for (const candidate of candidates) {
+      if (ios[candidate]) return ios[candidate];
+    }
+  }
+
+  return null;
+};
+
 const formatGenericDeviceName = ({ deviceType, os, deviceFallback }) => {
   if (os === 'Windows') return 'Windows PC';
   if (os === 'macOS') return 'Mac';
@@ -403,7 +434,8 @@ const formatGenericDeviceName = ({ deviceType, os, deviceFallback }) => {
 };
 
 const formatDeviceLabel = ({ deviceManufacturer, deviceModel, os, deviceType, deviceFallback }) => {
-  const namedModel = formatModelName({ deviceManufacturer, deviceModel });
+  const namedModel =
+    mapToMarketingName({ deviceModel, os }) || formatModelName({ deviceManufacturer, deviceModel });
   if (namedModel) return namedModel;
   const genericDeviceName = formatGenericDeviceName({ deviceType, os, deviceFallback });
   if (genericDeviceName) return genericDeviceName;
