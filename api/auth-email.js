@@ -375,14 +375,38 @@ const formatModelName = ({ deviceManufacturer, deviceModel }) => {
   return normalizedModel;
 };
 
-const formatDeviceLabel = ({ deviceManufacturer, deviceModel, os, deviceType, deviceFallback }) => {
-  const base = [os, deviceType].filter(Boolean).join(' ');
-  const namedModel = formatModelName({ deviceManufacturer, deviceModel });
+const formatGenericDeviceName = ({ deviceType, os, deviceFallback }) => {
+  if (os === 'Windows') return 'Windows PC';
+  if (os === 'macOS') return 'Mac';
+  if (os === 'ChromeOS') return 'Chromebook';
+  if (os === 'Linux') return deviceType === 'Desktop' ? 'Linux PC' : 'Linux device';
+  if (os === 'iOS') {
+    if (deviceType === 'Tablet') return 'iPad';
+    if (deviceType === 'Mobile') return 'iPhone';
+    return 'Apple device';
+  }
+  if (os === 'Android') {
+    if (deviceType === 'Tablet') return 'Android tablet';
+    if (deviceType === 'Mobile') return 'Android phone';
+    if (deviceType === 'TV') return 'Android TV';
+    if (deviceType === 'Wearable') return 'Android wearable';
+    return 'Android device';
+  }
+  if (deviceType === 'TV') return 'Smart TV';
+  if (deviceType === 'Wearable') return 'Wearable device';
+  if (deviceType === 'Console') return 'Game console';
+  if (deviceType === 'XR') return 'XR device';
+  if (deviceType === 'Tablet') return 'Tablet';
+  if (deviceType === 'Mobile') return 'Phone';
+  if (deviceType === 'Desktop') return 'Computer';
+  return deviceFallback || null;
+};
 
-  if (namedModel && base) return `${namedModel} (${base})`;
+const formatDeviceLabel = ({ deviceManufacturer, deviceModel, os, deviceType, deviceFallback }) => {
+  const namedModel = formatModelName({ deviceManufacturer, deviceModel });
   if (namedModel) return namedModel;
-  if (deviceFallback) return deviceFallback;
-  if (base) return base;
+  const genericDeviceName = formatGenericDeviceName({ deviceType, os, deviceFallback });
+  if (genericDeviceName) return genericDeviceName;
   return null;
 };
 
