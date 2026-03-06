@@ -420,6 +420,39 @@ const formatModelName = ({ deviceManufacturer, deviceModel }) => {
   return normalizedModel;
 };
 
+const DEVICE_MANUFACTURER_HINTS = [
+  { manufacturer: 'Apple', pattern: /^(?:apple\b|iphone\b|ipad\b|ipod\b)/i },
+  { manufacturer: 'Samsung', pattern: /^(?:samsung\b|galaxy\b|sm-|sch-|sgh-|shv-|gt-|ek-gn|yp-)/i },
+  { manufacturer: 'Google', pattern: /^(?:google\b|pixel\b)/i },
+  { manufacturer: 'Motorola', pattern: /^(?:motorola\b|moto\b)/i },
+  { manufacturer: 'Xiaomi', pattern: /^(?:xiaomi\b|redmi\b|poco\b|mi\s)/i },
+  { manufacturer: 'OnePlus', pattern: /^(?:oneplus\b)/i },
+  { manufacturer: 'HONOR', pattern: /^(?:honor\b)/i },
+  { manufacturer: 'Huawei', pattern: /^(?:huawei\b)/i },
+  { manufacturer: 'OPPO', pattern: /^(?:oppo\b)/i },
+  { manufacturer: 'realme', pattern: /^(?:realme\b)/i },
+  { manufacturer: 'Nothing', pattern: /^(?:nothing\b)/i },
+  { manufacturer: 'Sony', pattern: /^(?:sony\b|xperia\b)/i },
+  { manufacturer: 'ASUS', pattern: /^(?:asus\b|zenfone\b|rog phone\b)/i },
+  { manufacturer: 'Lenovo', pattern: /^(?:lenovo\b|yoga tab\b)/i },
+  { manufacturer: 'LG', pattern: /^(?:lg\b)/i },
+  { manufacturer: 'Nokia', pattern: /^(?:nokia\b)/i },
+  { manufacturer: 'ZTE', pattern: /^(?:zte\b)/i }
+];
+
+const inferManufacturerFromModel = (...values) => {
+  for (const value of values) {
+    const normalized = normalizeDeviceModel(value) || normalizeText(value);
+    if (!normalized) continue;
+
+    for (const hint of DEVICE_MANUFACTURER_HINTS) {
+      if (hint.pattern.test(normalized)) return hint.manufacturer;
+    }
+  }
+
+  return null;
+};
+
 const mapToMarketingName = async ({ deviceModel, os }) => {
   const normalizedModel = normalizeDeviceModel(deviceModel);
   if (!normalizedModel) return null;
@@ -485,9 +518,14 @@ const formatDeviceLabel = async ({
   deviceType,
   deviceFallback
 }) => {
-  const namedModel =
-    (await mapToMarketingName({ deviceModel, os })) ||
-    formatModelName({ deviceManufacturer, deviceModel });
+  const marketingModel = await mapToMarketingName({ deviceModel, os });
+  const resolvedManufacturer =
+    normalizeDeviceManufacturer(deviceManufacturer) ||
+    inferManufacturerFromModel(deviceModel, marketingModel);
+  const namedModel = formatModelName({
+    deviceManufacturer: resolvedManufacturer,
+    deviceModel: marketingModel || deviceModel
+  });
   if (namedModel) return namedModel;
   const genericDeviceName = formatGenericDeviceName({ deviceType, os, deviceFallback });
   if (genericDeviceName) return genericDeviceName;
@@ -535,7 +573,9 @@ const getRequestMeta = (req) => {
   const os = normalizeOsName(getHeader(req, 'x-client-os')) || parsed.os;
   const deviceType = normalizeDeviceType(getHeader(req, 'x-client-device-type')) || parsed.deviceType;
   const deviceModel = normalizeDeviceModel(getHeader(req, 'x-client-device-model')) || parsed.deviceModel;
-  const deviceManufacturer = normalizeDeviceManufacturer(getHeader(req, 'x-client-device-manufacturer'));
+  const deviceManufacturer =
+    normalizeDeviceManufacturer(getHeader(req, 'x-client-device-manufacturer')) ||
+    inferManufacturerFromModel(deviceModel);
   const device = buildDeviceFallback({ os, deviceType }) || parsed.device;
 
   const city = getHeader(req, 'x-vercel-ip-city') || getHeader(req, 'x-appengine-city');
