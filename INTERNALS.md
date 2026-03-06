@@ -7,7 +7,7 @@ This document is for development and operations only.
 - Frontend: Vite + React, hosted as static assets (GitHub Pages).
 - Auth: Firebase Authentication (Google provider).
 - Storage: Google Drive AppData + Drive folders.
-- Email API: Serverless endpoint (Vercel) that verifies Firebase ID tokens and sends via Brevo.
+- Email API: Serverless endpoint (Vercel) that verifies Firebase ID tokens, merges request metadata (browser/device/OS), and sends via Brevo.
 
 ## Environment Variables
 
@@ -85,6 +85,24 @@ For live reload on device/emulator:
 npm run android:dev
 npx cap run android -l --external
 ```
+
+The Android build also uses `@capacitor/device` so the login email flow can capture native device model/manufacturer info when available.
+
+## Auth Email Metadata
+
+The frontend sends the Firebase ID token plus optional client metadata headers to `api/auth-email`:
+
+- `X-Client-Timezone`
+- `X-Client-Locale`
+- `X-Client-Browser`
+- `X-Client-Device-Manufacturer`
+- `X-Client-Device-Model`
+- `X-Client-Device-Type`
+- `X-Client-OS`
+
+The client collects these from browser user-agent/client hints on the web and from Capacitor device APIs on native builds. The API merges those values with server-side user-agent fallback parsing before rendering the email device label.
+
+This is best-effort metadata. Some platforms expose only generic model codes or generic platform names, so exact consumer marketing names are not guaranteed for every device.
 
 ## Google OAuth + Drive Configuration
 
