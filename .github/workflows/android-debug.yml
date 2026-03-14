@@ -72,7 +72,9 @@ jobs:
             echo "ANDROID_HOME=$android_sdk_dir"
           } >> "$GITHUB_ENV"
 
+          set +o pipefail
           yes | "$sdkmanager_bin" --sdk_root="$android_sdk_dir" --licenses >/dev/null
+          set -o pipefail
           "$sdkmanager_bin" --sdk_root="$android_sdk_dir" --install \
             "platform-tools" \
             "platforms;android-36" \
