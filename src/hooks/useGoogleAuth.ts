@@ -57,6 +57,24 @@ const IS_NATIVE = Capacitor.isNativePlatform();
 const IS_ANDROID = Capacitor.getPlatform() === 'android';
 let socialLoginInitialized = false;
 
+const isAccountReauthFailure = (err: unknown) => {
+  const message = err instanceof Error ? err.message : String(err ?? '');
+  return /\bAccount reauth failed\b/i.test(message);
+};
+
+const formatNativeGoogleAuthError = (err: unknown, context: 'signin' | 'drive') => {
+  if (isAccountReauthFailure(err)) {
+    if (context === 'drive') {
+      return 'Google Drive authorization could not be completed on this device. Verify the Android OAuth client SHA-1/SHA-256 and the Google web client ID for this build, then try again.';
+    }
+    return 'Google Sign-In could not be completed on this device. Verify the Android OAuth client SHA-1/SHA-256 and the Google web client ID for this build, then try again.';
+  }
+  if (err instanceof Error && err.message) return err.message;
+  return context === 'drive'
+    ? 'Google Drive permission is required to sync.'
+    : 'Google sign-in failed.';
+};
+
 const ensureNativeSocialLogin = async () => {
   if (!IS_NATIVE || socialLoginInitialized) return;
   if (!GOOGLE_WEB_CLIENT_ID) {
@@ -397,15 +415,24 @@ export const useGoogleAuth = () => {
   }, [applyAccessToken]);
 
   const nativeSignInWithScopes = useCallback(
-    async (scopes: string[]) => {
+    async (
+      scopes: string[],
+      options?: { style?: 'bottom' | 'standard'; filterByAuthorizedAccounts?: boolean }
+    ) => {
       await ensureNativeSocialLogin();
-      const response = await SocialLogin.login({
-        provider: 'google',
-        options: {
-          style: 'bottom',
-          scopes
-        }
-      });
+      let response;
+      try {
+        response = await SocialLogin.login({
+          provider: 'google',
+          options: {
+            style: options?.style ?? 'bottom',
+            filterByAuthorizedAccounts: options?.filterByAuthorizedAccounts,
+            scopes
+          }
+        });
+      } catch (err) {
+        throw new Error(formatNativeGoogleAuthError(err, scopes === GOOGLE_SCOPES ? 'drive' : 'signin'));
+      }
       if (response.provider !== 'google') {
         throw new Error('Google sign-in failed.');
       }
@@ -493,16 +520,15 @@ export const useGoogleAuth = () => {
 
       if (shouldPromptForDriveScope) {
         try {
-          const result = await nativeSignInWithScopes(GOOGLE_SCOPES);
+          const result = await nativeSignInWithScopes(GOOGLE_SCOPES, {
+            style: IS_ANDROID ? 'standard' : 'bottom',
+            filterByAuthorizedAccounts: IS_ANDROID ? false : undefined
+          });
           setAndroidDriveScopeGranted(true);
           return result.accessToken;
         } catch (err) {
           setAndroidDriveScopeGranted(false);
-          const message =
-            err instanceof Error && err.message
-              ? err.message
-              : 'Google Drive permission is required to sync.';
-          setError(message);
+          setError(formatNativeGoogleAuthError(err, 'drive'));
           return null;
         }
       }
@@ -628,9 +654,12 @@ export const useGoogleAuth = () => {
     setError(null);
     try {
       if (IS_NATIVE) {
-        const authResult = await nativeSignInWithScopes(GOOGLE_SCOPES);
+        const authResult = await nativeSignInWithScopes(IS_ANDROID ? [] : GOOGLE_SCOPES, {
+          style: IS_ANDROID ? 'standard' : 'bottom',
+          filterByAuthorizedAccounts: IS_ANDROID ? false : undefined
+        });
         updateSessionStart(Date.now());
-        setAndroidDriveScopeGranted(true);
+        setAndroidDriveScopeGranted(!IS_ANDROID);
         void notifyAuthEmail(authResult.user);
         return;
       }
@@ -643,8 +672,7 @@ export const useGoogleAuth = () => {
         void notifyAuthEmail(result.user);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Google sign-in failed.';
-      setError(message);
+      setError(formatNativeGoogleAuthError(err, 'signin'));
     } finally {
       setLoading(false);
     }
