@@ -13,23 +13,70 @@ jobs:
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: package-lock.json
 
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sdk_roots=(
+            "${ANDROID_SDK_ROOT:-}"
+            "${ANDROID_HOME:-}"
+            "/usr/local/lib/android/sdk"
+            "$HOME/android-sdk"
+          )
+
+          android_sdk_dir=""
+          for candidate in "${sdk_roots[@]}"; do
+            if [ -n "$candidate" ] && [ -d "$candidate" ]; then
+              android_sdk_dir="$candidate"
+              break
+            fi
+          done
+
+          if [ -z "$android_sdk_dir" ]; then
+            echo "Unable to locate Android SDK on runner."
+            exit 1
+          fi
+
+          sdkmanager_bin="$android_sdk_dir/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$sdkmanager_bin" ] && [ -x "$android_sdk_dir/cmdline-tools/bin/sdkmanager" ]; then
+            sdkmanager_bin="$android_sdk_dir/cmdline-tools/bin/sdkmanager"
+          fi
+
+          if [ ! -x "$sdkmanager_bin" ] && command -v sdkmanager >/dev/null 2>&1; then
+            sdkmanager_bin="$(command -v sdkmanager)"
+          fi
+
+          if [ ! -x "$sdkmanager_bin" ]; then
+            echo "sdkmanager is not available on this runner."
+            exit 1
+          fi
+
+          {
+            echo "ANDROID_SDK_ROOT=$android_sdk_dir"
+            echo "ANDROID_HOME=$android_sdk_dir"
+          } >> "$GITHUB_ENV"
+
+          yes | "$sdkmanager_bin" --sdk_root="$android_sdk_dir" --licenses >/dev/null
+          "$sdkmanager_bin" --sdk_root="$android_sdk_dir" --install \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0"
 
       - name: Decode Android keystore
         env:
@@ -40,6 +87,16 @@ jobs:
             exit 1
           fi
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/ci-keystore.jks
+
+      - name: Set Android version metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          {
+            echo "ANDROID_VERSION_CODE=$GITHUB_RUN_NUMBER"
+            echo "ANDROID_VERSION_NAME=debug-$GITHUB_RUN_NUMBER"
+          } >> "$GITHUB_ENV"
 
       - name: Install dependencies
         run: npm ci
@@ -61,7 +118,7 @@ jobs:
           ./gradlew assembleDebug
 
       - name: Upload APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sofull-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
