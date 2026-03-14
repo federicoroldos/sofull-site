@@ -1045,7 +1045,7 @@ const sendResendEmail = async ({ toEmail, toName, subject, textContent, htmlCont
     },
     body: JSON.stringify({
       from: `${BRAND_NAME} <${senderEmail}>`,
-      to: toName ? [{ email: toEmail, name: toName }] : [toEmail],
+      to: [toEmail],
       subject,
       text: textContent,
       html: htmlContent
@@ -1433,7 +1433,10 @@ export default async function handler(req, res) {
       if (err instanceof EmailProviderError) {
         logger.error('Email provider request failed.', {
           status: err.status,
-          details: err.details
+          details: err.details,
+          provider: 'resend',
+          fromEmailConfigured: Boolean(process.env.RESEND_FROM_EMAIL),
+          toEmail
         });
       } else {
         logger.error('Failed to send email.', {
