@@ -7,7 +7,7 @@ This document is for development and operations only.
 - Frontend: Vite + React, hosted as static assets (GitHub Pages).
 - Auth: Firebase Authentication (Google provider).
 - Storage: Google Drive AppData + Drive folders.
-- Email API: Serverless endpoint (Vercel) that verifies Firebase ID tokens, merges request metadata (browser/device/OS), and sends via Brevo.
+- Email API: Serverless endpoint (Vercel) that verifies Firebase ID tokens, merges request metadata (browser/device/OS), and sends via Resend.
 
 ## Environment Variables
 
@@ -24,7 +24,7 @@ Client (Vite) variables:
 - `VITE_ENFORCE_ACCESS_TOKEN_EXPIRY` (optional)
 
 Server (email API) variables:
-- `BREVO_API_KEY`, `BREVO_SENDER_EMAIL`, `BREVO_SENDER_NAME`
+- `RESEND_API_KEY`, `RESEND_FROM_EMAIL`
 - `FIREBASE_SERVICE_ACCOUNT_JSON`
 - `PUBLIC_SITE_URL` (for links/logos in emails)
 - `SUPPORT_EMAIL`

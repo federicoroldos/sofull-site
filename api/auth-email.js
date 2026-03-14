@@ -1029,28 +1029,26 @@ class EmailProviderError extends Error {
   }
 }
 
-const sendBrevoEmail = async ({ toEmail, toName, subject, textContent, htmlContent }) => {
-  const apiKey = process.env.BREVO_API_KEY;
-  const senderEmail = process.env.BREVO_SENDER_EMAIL;
-  const senderName = `"${BRAND_NAME.replace(/"/g, '\\"')}"`;
+const sendResendEmail = async ({ toEmail, toName, subject, textContent, htmlContent }) => {
+  const apiKey = process.env.RESEND_API_KEY;
+  const senderEmail = process.env.RESEND_FROM_EMAIL;
 
   if (!apiKey || !senderEmail) {
-    throw new Error('Missing BREVO_API_KEY or BREVO_SENDER_EMAIL.');
+    throw new Error('Missing RESEND_API_KEY or RESEND_FROM_EMAIL.');
   }
 
-  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+  const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
-      'api-key': apiKey,
-      'content-type': 'application/json',
-      accept: 'application/json'
+      Authorization: `Bearer ${apiKey}`,
+      'content-type': 'application/json'
     },
     body: JSON.stringify({
-      sender: { email: senderEmail, name: senderName },
-      to: [{ email: toEmail, name: toName }],
+      from: `${BRAND_NAME} <${senderEmail}>`,
+      to: toName ? [{ email: toEmail, name: toName }] : [toEmail],
       subject,
-      textContent,
-      htmlContent
+      text: textContent,
+      html: htmlContent
     })
   });
 
@@ -1061,7 +1059,7 @@ const sendBrevoEmail = async ({ toEmail, toName, subject, textContent, htmlConte
     } catch {
       details = '';
     }
-    throw new EmailProviderError('Brevo request failed.', response.status, details);
+    throw new EmailProviderError('Resend request failed.', response.status, details);
   }
 };
 
@@ -1363,7 +1361,7 @@ export default async function handler(req, res) {
               accountEmail: email,
               logoUrl
             });
-            await sendBrevoEmail({
+            await sendResendEmail({
               toEmail: email,
               toName: displayName,
               subject: process.env.WELCOME_EMAIL_SUBJECT || emailPayload.subject,
@@ -1408,7 +1406,7 @@ export default async function handler(req, res) {
               accountEmail: email,
               logoUrl
             });
-            await sendBrevoEmail({
+            await sendResendEmail({
               toEmail: email,
               toName: displayName,
               subject: process.env.LOGIN_EMAIL_SUBJECT || emailPayload.subject,
