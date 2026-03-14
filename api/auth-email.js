@@ -442,7 +442,7 @@ const DEVICE_MANUFACTURER_HINTS = [
 
 const inferManufacturerFromModel = (...values) => {
   for (const value of values) {
-    const normalized = normalizeDeviceModel(value) || normalizeText(value);
+    const normalized = normalizeDeviceModel(value) || normalizeClientValue(value);
     if (!normalized) continue;
 
     for (const hint of DEVICE_MANUFACTURER_HINTS) {
