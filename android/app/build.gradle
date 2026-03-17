@@ -2,6 +2,7 @@ apply plugin: 'com.android.application'
 apply plugin: 'com.github.triplet.play'
 
 import com.github.triplet.gradle.androidpublisher.ReleaseStatus
+import java.util.Locale
 
 def androidVersionCodeValue = System.getenv("ANDROID_VERSION_CODE") ?: "2"
 def androidVersionCodeNumber
@@ -14,6 +15,15 @@ try {
 def androidVersionNameValue = System.getenv("ANDROID_VERSION_NAME") ?: "1.0.1"
 def googlePlayTrackValue = System.getenv("GOOGLE_PLAY_TRACK") ?: "internal"
 def googlePlayCredentialsPath = System.getenv("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH")
+def googlePlayReleaseStatusValue =
+        (System.getenv("GOOGLE_PLAY_RELEASE_STATUS") ?: "draft").toUpperCase(Locale.ROOT)
+def googlePlayReleaseStatus
+
+try {
+    googlePlayReleaseStatus = ReleaseStatus.valueOf(googlePlayReleaseStatusValue)
+} catch (IllegalArgumentException ignored) {
+    googlePlayReleaseStatus = ReleaseStatus.DRAFT
+}
 
 def hasCiSigning = System.getenv("ANDROID_KEYSTORE_PASSWORD") &&
         System.getenv("ANDROID_KEY_ALIAS") &&
@@ -82,7 +92,7 @@ dependencies {
 play {
     defaultToAppBundles.set(true)
     track.set(googlePlayTrackValue)
-    releaseStatus.set(ReleaseStatus.COMPLETED)
+    releaseStatus.set(googlePlayReleaseStatus)
 
     if (googlePlayCredentialsPath) {
         serviceAccountCredentials.set(file(googlePlayCredentialsPath))

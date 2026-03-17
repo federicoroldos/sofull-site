@@ -7,6 +7,10 @@ on:
         description: Google Play track
         required: false
         default: internal
+      google_play_release_status:
+        description: Google Play release status
+        required: false
+        default: draft
       android_version_name:
         description: Optional Android versionName override
         required: false
@@ -59,6 +63,7 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
           GOOGLE_PLAY_TRACK: ${{ inputs.google_play_track }}
+          GOOGLE_PLAY_RELEASE_STATUS: ${{ inputs.google_play_release_status }}
           ANDROID_VERSION_NAME: ${{ inputs.android_version_name }}
           ANDROID_VERSION_CODE: ${{ inputs.android_version_code }}
           VITE_AUTH_EMAIL_ENDPOINT: ${{ secrets.VITE_AUTH_EMAIL_ENDPOINT }}
