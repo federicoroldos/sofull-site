@@ -65,9 +65,9 @@ const isAccountReauthFailure = (err: unknown) => {
 const formatNativeGoogleAuthError = (err: unknown, context: 'signin' | 'drive') => {
   if (isAccountReauthFailure(err)) {
     if (context === 'drive') {
-      return 'Google Drive authorization could not be completed on this device. Verify the Android OAuth client SHA-1/SHA-256 and the Google web client ID for this build, then try again.';
+      return 'Google Drive authorization could not be completed on this device. Verify the Android OAuth client package name and SHA-1/SHA-256. If this build came from Google Play, use the Play App Signing certificate fingerprints from Play Console > App integrity. Also confirm the Google web client ID for this build, then try again.';
     }
-    return 'Google Sign-In could not be completed on this device. Verify the Android OAuth client SHA-1/SHA-256 and the Google web client ID for this build, then try again.';
+    return 'Google Sign-In could not be completed on this device. Verify the Android OAuth client package name and SHA-1/SHA-256. If this build came from Google Play, use the Play App Signing certificate fingerprints from Play Console > App integrity. Also confirm the Google web client ID for this build, then try again.';
   }
   if (err instanceof Error && err.message) return err.message;
   return context === 'drive'

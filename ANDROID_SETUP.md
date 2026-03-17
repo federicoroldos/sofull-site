@@ -46,7 +46,13 @@ If you host `api/auth-email` yourself, allow Capacitor origins in CORS (`http://
 
 - Create **OAuth Client ID ? Android**.
 - Package name: `com.sofull.site` (or your custom appId).
-- SHA-1 fingerprint:
+- Register both the **SHA-1** and **SHA-256** fingerprints for the certificate that signs the installed app.
+
+For local installs or direct APK installs, use the keystore that signed that APK.
+
+For Google Play installs, use the **Play App Signing** certificate from **Play Console > App integrity**, not just your upload keystore.
+
+- Fingerprints:
 
 Debug keystore (Windows):
 
@@ -67,7 +73,18 @@ keytool -genkeypair -v -keystore sofull-release.keystore -alias sofull -keyalg R
 keytool -list -v -alias sofull -keystore sofull-release.keystore
 ```
 
-Use the SHA-1 in Google Cloud for the Android OAuth client.
+Add the matching SHA-1 and SHA-256 values to the Android OAuth client in Google Cloud.
+
+### Which certificate to use
+
+- Android Studio / local debug install:
+  Use your local debug keystore fingerprints.
+- GitHub Actions debug/release artifact installed directly:
+  Use the CI keystore fingerprints from the workflow output.
+- Google Play internal/closed/open/production install:
+  Use the **App signing key certificate** fingerprints shown in Play Console.
+
+If you upload an AAB to Google Play, the device build is re-signed by Google Play App Signing before users install it. That installed build will not match your upload keystore fingerprints unless you are explicitly using the same app-signing key in Play.
 
 ## Build & Run
 
@@ -231,8 +248,10 @@ Add these repo secrets:
 - `ANDROID_KEY_ALIAS` = alias (ex: `sofull`)
 - `ANDROID_KEY_PASSWORD` = key password
 
-The workflow will decode the keystore and sign the APK with it. Use the keystore SHA-1 in your
-Android OAuth Client.
+The workflows now print the decoded keystore SHA-1 and SHA-256 so you can copy the exact values into
+Google Cloud for artifact-installed builds.
+
+Important: if the app is installed from Google Play, the correct fingerprints come from **Play Console > App integrity > App signing key certificate**, not from this CI keystore unless Play is configured to use the same signing key.
 
 ## Icons
 
