@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -69,9 +70,78 @@ function resolveLocalPath(filePath) {
 function writeTempJsonFile(prefix, filename, value) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   const filePath = path.join(tempDir, filename);
-  const parsed = JSON.parse(value);
+  const parsed = parseServiceAccountCredentialsValue(value, "temporary credentials");
   fs.writeFileSync(filePath, `${JSON.stringify(parsed)}\n`, { mode: 0o600 });
   return { tempDir, filePath };
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function validateServiceAccountShape(value, sourceLabel) {
+  if (!isPlainObject(value)) {
+    throw new Error(`${sourceLabel} must be a JSON object.`);
+  }
+
+  const requiredKeys = ["type", "project_id", "private_key", "client_email"];
+  const missingKeys = requiredKeys.filter((key) => typeof value[key] !== "string" || !value[key].trim());
+  if (missingKeys.length > 0) {
+    throw new Error(
+      `${sourceLabel} is missing required service-account fields: ${missingKeys.join(", ")}.`
+    );
+  }
+
+  return value;
+}
+
+function tryParseJson(rawValue) {
+  return JSON.parse(rawValue);
+}
+
+function tryParseBase64Json(rawValue) {
+  const normalized = rawValue.replace(/\s+/gu, "");
+  if (!normalized || normalized.length % 4 === 1 || /[^A-Za-z0-9+/=]/u.test(normalized)) {
+    return null;
+  }
+
+  const decoded = Buffer.from(normalized, "base64").toString("utf8").trim();
+  if (!decoded.startsWith("{")) {
+    return null;
+  }
+
+  return JSON.parse(decoded);
+}
+
+function tryParseObjectLiteral(rawValue) {
+  return vm.runInNewContext(`(${rawValue})`, Object.create(null), {
+    timeout: 1000,
+  });
+}
+
+function parseServiceAccountCredentialsValue(rawValue, sourceLabel) {
+  const trimmed = String(rawValue || "").trim();
+  if (!trimmed) {
+    throw new Error(`${sourceLabel} is empty.`);
+  }
+
+  const parsers = [tryParseJson, tryParseBase64Json, tryParseObjectLiteral];
+  for (const parser of parsers) {
+    try {
+      const parsed = parser(trimmed);
+      if (parsed == null) {
+        continue;
+      }
+      return validateServiceAccountShape(parsed, sourceLabel);
+    } catch {
+      // Fall through to the next parser.
+    }
+  }
+
+  throw new Error(
+    `${sourceLabel} is not valid Google Play service-account JSON. ` +
+      `Store the exact JSON from Google Cloud in the secret, or base64-encode that JSON.`
+  );
 }
 
 function getDefaultVersionName() {
@@ -104,17 +174,24 @@ function base64UrlEncode(value) {
 
 function getServiceAccountCredentials() {
   if (process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH) {
-    return JSON.parse(
-      fs.readFileSync(process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH, "utf8")
+    return parseServiceAccountCredentialsValue(
+      fs.readFileSync(process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH, "utf8"),
+      `Google Play service account file (${process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH})`
     );
   }
 
   if (process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON) {
-    return JSON.parse(process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON);
+    return parseServiceAccountCredentialsValue(
+      process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON,
+      "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"
+    );
   }
 
   if (process.env.ANDROID_PUBLISHER_CREDENTIALS) {
-    return JSON.parse(process.env.ANDROID_PUBLISHER_CREDENTIALS);
+    return parseServiceAccountCredentialsValue(
+      process.env.ANDROID_PUBLISHER_CREDENTIALS,
+      "ANDROID_PUBLISHER_CREDENTIALS"
+    );
   }
 
   throw new Error("Google Play service account credentials are not configured.");
