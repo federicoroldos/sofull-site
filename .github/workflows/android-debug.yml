@@ -7,7 +7,7 @@ jobs:
   build-android:
     runs-on: ubuntu-latest
     env:
-      ANDROID_KEYSTORE_PATH: ci-keystore.jks
+      ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/ci-keystore.jks
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -83,12 +83,15 @@ jobs:
       - name: Decode Android keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        shell: bash
         run: |
+          set -euo pipefail
           if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
             echo "Missing ANDROID_KEYSTORE_BASE64 secret."
             exit 1
           fi
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/ci-keystore.jks
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
 
       - name: Show signing certificate fingerprints
         shell: bash
@@ -96,7 +99,7 @@ jobs:
           set -euo pipefail
           keytool -list -v \
             -alias "$ANDROID_KEY_ALIAS" \
-            -keystore android/app/ci-keystore.jks \
+            -keystore "$ANDROID_KEYSTORE_PATH" \
             -storepass "$ANDROID_KEYSTORE_PASSWORD" \
             -keypass "$ANDROID_KEY_PASSWORD" | awk '/Alias name:|SHA1:|SHA256:/{print}'
 
@@ -151,3 +154,8 @@ jobs:
         with:
           name: sofull-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Clean up Android keystore
+        if: always()
+        shell: bash
+        run: rm -f "$ANDROID_KEYSTORE_PATH"

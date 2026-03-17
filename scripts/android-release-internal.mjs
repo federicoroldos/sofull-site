@@ -1,6 +1,7 @@
 import { createSign } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -65,6 +66,14 @@ function resolveLocalPath(filePath) {
     : path.resolve(projectRoot, filePath);
 }
 
+function writeTempJsonFile(prefix, filename, value) {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const filePath = path.join(tempDir, filename);
+  const parsed = JSON.parse(value);
+  fs.writeFileSync(filePath, `${JSON.stringify(parsed)}\n`, { mode: 0o600 });
+  return { tempDir, filePath };
+}
+
 function getDefaultVersionName() {
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
   const now = new Date();
@@ -94,18 +103,18 @@ function base64UrlEncode(value) {
 }
 
 function getServiceAccountCredentials() {
+  if (process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH) {
+    return JSON.parse(
+      fs.readFileSync(process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH, "utf8")
+    );
+  }
+
   if (process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON) {
     return JSON.parse(process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON);
   }
 
   if (process.env.ANDROID_PUBLISHER_CREDENTIALS) {
     return JSON.parse(process.env.ANDROID_PUBLISHER_CREDENTIALS);
-  }
-
-  if (process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH) {
-    return JSON.parse(
-      fs.readFileSync(process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH, "utf8")
-    );
   }
 
   throw new Error("Google Play service account credentials are not configured.");
@@ -303,9 +312,24 @@ if (process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH) {
 }
 
 async function main() {
+  let generatedPlayCredentialsTempDir = null;
   process.env.GOOGLE_PLAY_TRACK = process.env.GOOGLE_PLAY_TRACK || "internal";
 
   ensureRequiredEnv();
+
+  if (!process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH) {
+    const rawCredentials =
+      process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON || process.env.ANDROID_PUBLISHER_CREDENTIALS;
+    if (rawCredentials) {
+      const generatedCredentialsFile = writeTempJsonFile(
+        "sofull-play-credentials-",
+        "google-play-service-account.json",
+        rawCredentials
+      );
+      process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH = generatedCredentialsFile.filePath;
+      generatedPlayCredentialsTempDir = generatedCredentialsFile.tempDir;
+    }
+  }
 
   process.env.ANDROID_VERSION_CODE =
     process.env.ANDROID_VERSION_CODE || (await getDefaultVersionCode());
@@ -320,8 +344,23 @@ async function main() {
       `(versionCode ${process.env.ANDROID_VERSION_CODE}) to Google Play ${process.env.GOOGLE_PLAY_TRACK}.`
   );
 
-  run(npmCommand, ["run", "android:build"], projectRoot);
-  run(gradleCommand, ["publishReleaseBundle"], androidDir);
+  const buildEnv = { ...process.env };
+  delete buildEnv.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON;
+  delete buildEnv.ANDROID_PUBLISHER_CREDENTIALS;
+  delete buildEnv.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH;
+
+  const gradleEnv = { ...process.env };
+  delete gradleEnv.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON;
+  delete gradleEnv.ANDROID_PUBLISHER_CREDENTIALS;
+
+  try {
+    run(npmCommand, ["run", "android:build"], projectRoot, buildEnv);
+    run(gradleCommand, ["publishReleaseBundle"], androidDir, gradleEnv);
+  } finally {
+    if (generatedPlayCredentialsTempDir) {
+      fs.rmSync(generatedPlayCredentialsTempDir, { force: true, recursive: true });
+    }
+  }
 }
 
 await main();
