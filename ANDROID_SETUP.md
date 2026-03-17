@@ -159,6 +159,7 @@ Required values:
 Optional overrides:
 
 - `GOOGLE_PLAY_TRACK` (defaults to `internal`)
+- `GOOGLE_PLAY_RELEASE_STATUS` (defaults to `draft`; required for apps that are still draft in Play Console)
 - `ANDROID_VERSION_CODE`
 - `ANDROID_VERSION_NAME`
 
@@ -193,7 +194,8 @@ Required GitHub repository secrets:
 
 Run it from `Actions > Android Internal Release > Run workflow`.
 It decodes the keystore on the runner, builds the Android app, and uploads the release bundle
-to the selected Google Play track.
+to the selected Google Play track. The workflow defaults the Play release status to `draft`,
+which is required until the app is no longer a draft app in Play Console.
 
 ## CI Signing (Stable SHA-1)
 
