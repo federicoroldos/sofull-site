@@ -127,6 +127,74 @@ Release AAB:
 
 For release builds, configure signing in `android/app/build.gradle` (keystore, key alias, passwords).
 
+## Upload To Google Play Internal Testing
+
+This repo now supports a one-command internal release flow:
+
+```bash
+npm run android:release:internal
+```
+
+What it does:
+
+- Builds the web app
+- Syncs Capacitor into `android/`
+- Reads the highest existing Play `versionCode` and uses `latest + 1` unless you override it
+- Builds the signed release AAB
+- Uploads it to the Google Play `internal` track
+
+### Local release env file
+
+Copy [android.release.env.example](android.release.env.example) to `.env.android.release.local`
+and fill in the real values. The release script loads that file automatically.
+
+Required values:
+
+- `ANDROID_KEYSTORE_PATH`
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
+- `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH`
+
+Optional overrides:
+
+- `GOOGLE_PLAY_TRACK` (defaults to `internal`)
+- `ANDROID_VERSION_CODE`
+- `ANDROID_VERSION_NAME`
+
+You can also provide the raw service-account JSON in `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`
+or `ANDROID_PUBLISHER_CREDENTIALS` instead of using `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH`.
+
+### Google Play API access
+
+To upload automatically, create a Google Cloud service account, then grant that account access
+to your app in Play Console with at least release-management permissions for the internal track.
+
+Once that is set up and your env vars are present, running `npm run android:release:internal`
+will publish the bundle straight to internal testing, ready to install from the Play Store tester link.
+
+### GitHub Actions
+
+This repo includes a manual workflow at `.github/workflows/android-release-internal.yml`.
+
+Required GitHub repository secrets:
+
+- `ANDROID_KEYSTORE_BASE64`
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
+- `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`
+- `VITE_AUTH_EMAIL_ENDPOINT`
+- `VITE_FIREBASE_API_KEY`
+- `VITE_FIREBASE_APP_ID`
+- `VITE_FIREBASE_AUTH_DOMAIN`
+- `VITE_FIREBASE_PROJECT_ID`
+- `VITE_GOOGLE_WEB_CLIENT_ID`
+
+Run it from `Actions > Android Internal Release > Run workflow`.
+It decodes the keystore on the runner, builds the Android app, and uploads the release bundle
+to the selected Google Play track.
+
 ## CI Signing (Stable SHA-1)
 
 GitHub Actions runners generate a new debug keystore each run, which changes the SHA-1 and breaks
