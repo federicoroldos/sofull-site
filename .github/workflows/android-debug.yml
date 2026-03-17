@@ -90,6 +90,16 @@ jobs:
           fi
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/ci-keystore.jks
 
+      - name: Show signing certificate fingerprints
+        shell: bash
+        run: |
+          set -euo pipefail
+          keytool -list -v \
+            -alias "$ANDROID_KEY_ALIAS" \
+            -keystore android/app/ci-keystore.jks \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -keypass "$ANDROID_KEY_PASSWORD" | awk '/Alias name:|SHA1:|SHA256:/{print}'
+
       - name: Set Android version metadata
         shell: bash
         run: |
@@ -118,6 +128,23 @@ jobs:
           cd android
           chmod +x ./gradlew
           ./gradlew assembleDebug
+
+      - name: Verify debug APK signing certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          apksigner_bin="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}/build-tools/36.0.0/apksigner"
+          if [ ! -x "$apksigner_bin" ] && command -v apksigner >/dev/null 2>&1; then
+            apksigner_bin="$(command -v apksigner)"
+          fi
+
+          if [ ! -x "$apksigner_bin" ]; then
+            echo "apksigner not found."
+            exit 1
+          fi
+
+          "$apksigner_bin" verify --print-certs android/app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v7

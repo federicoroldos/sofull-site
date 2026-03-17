@@ -49,6 +49,16 @@ jobs:
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/sofull-release.jks"
 
+      - name: Show upload certificate fingerprints
+        shell: bash
+        run: |
+          set -euo pipefail
+          keytool -list -v \
+            -alias "${{ secrets.ANDROID_KEY_ALIAS }}" \
+            -keystore "$RUNNER_TEMP/sofull-release.jks" \
+            -storepass "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+            -keypass "${{ secrets.ANDROID_KEY_PASSWORD }}" | awk '/Alias name:|SHA1:|SHA256:/{print}'
+
       - name: Install dependencies
         run: npm ci
 
