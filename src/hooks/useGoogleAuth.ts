@@ -103,7 +103,7 @@ const formatNativeGoogleAuthError = (err: unknown, context: 'signin' | 'drive') 
   }
   if (err instanceof Error && err.message) return err.message;
   return context === 'drive'
-    ? 'Google Drive permission is required to sync.'
+    ? 'Google Drive access is required to sync. Please allow access by pressing the refresh button to try again.'
     : 'Google sign-in failed.';
 };
 

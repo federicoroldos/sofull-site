@@ -86,6 +86,8 @@ const DRIVE_SCOPE_ERROR_PATTERNS = [
   /\binsufficient authentication scopes?\b/i,
   /\binsufficient permissions?\b/i
 ];
+const DRIVE_SCOPE_REQUIRED_MESSAGE =
+  'Google Drive access is required to sync. Please allow access by pressing the refresh button to try again.';
 const isDriveAuthError = (error: unknown) =>
   error instanceof Error && DRIVE_AUTH_ERROR_PATTERNS.some((pattern) => pattern.test(error.message));
 const isDriveScopeError = (error: unknown) =>
@@ -95,7 +97,7 @@ const formatDriveSyncError = (error: unknown, fallback: string) => {
     return 'Google Drive session expired. Sign in again to continue syncing.';
   }
   if (isDriveScopeError(error)) {
-    return 'Google Drive access is required to sync. Please allow access and try again.';
+    return DRIVE_SCOPE_REQUIRED_MESSAGE;
   }
   return error instanceof Error && error.message ? error.message : fallback;
 };
@@ -560,7 +562,7 @@ const App = () => {
       if (!token) {
         if (!cancelled && IS_ANDROID) {
           setSyncState('error');
-          setSyncMessage('Google Drive access is required to sync. Please allow access and try again.');
+          setSyncMessage(DRIVE_SCOPE_REQUIRED_MESSAGE);
         }
         return;
       }
