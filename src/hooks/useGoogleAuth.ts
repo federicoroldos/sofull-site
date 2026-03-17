@@ -83,13 +83,55 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: 
   });
 };
 
+const GOOGLE_ACCOUNT_MISMATCH_MESSAGE =
+  'Google Drive permission must be granted with the same Google account used to sign in.';
+
+const normalizeEmail = (value: string | null | undefined) => value?.trim().toLowerCase() || null;
+
+const decodeJwtPayload = (token: string) => {
+  const parts = token.split('.');
+  if (parts.length < 2 || !parts[1]) return null;
+  try {
+    const normalized = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+    const decoded = globalThis.atob(padded);
+    return JSON.parse(decoded) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+};
+
+const getGoogleAccountEmailFromIdToken = (idToken: string) => {
+  const payload = decodeJwtPayload(idToken);
+  const email = payload?.email;
+  return typeof email === 'string' ? normalizeEmail(email) : null;
+};
+
+const getGoogleUserEmail = (user: User | null | undefined) =>
+  normalizeEmail(
+    user?.email ??
+      user?.providerData.find(
+        (provider) => provider.providerId === GoogleAuthProvider.PROVIDER_ID && provider.email
+      )?.email
+  );
+
 const isAccountReauthFailure = (err: unknown) => {
   const message = err instanceof Error ? err.message : String(err ?? '');
   return /\bAccount reauth failed\b/i.test(message);
 };
 
+const isGoogleAccountMismatchError = (err: unknown) => {
+  const message = err instanceof Error ? err.message : String(err ?? '');
+  return message === GOOGLE_ACCOUNT_MISMATCH_MESSAGE;
+};
+
 const formatNativeGoogleAuthError = (err: unknown, context: 'signin' | 'drive') => {
   const message = err instanceof Error ? err.message : String(err ?? '');
+  if (isGoogleAccountMismatchError(err)) {
+    return context === 'drive'
+      ? 'Google Drive permission was granted with a different account. Choose the same Google account you used to sign in.'
+      : 'Google sign-in must finish with the same Google account in both prompts. Try again.';
+  }
   if (/\b(timed out|timeout)\b/i.test(message)) {
     return context === 'drive'
       ? 'Google Drive session restore timed out. Sign in again to continue syncing.'
@@ -143,6 +185,12 @@ type StoredTokenEntry = {
   token: string;
   storedAt: number;
   expiresAt?: number | null;
+};
+
+type NativeGoogleSignInOptions = {
+  style?: 'bottom' | 'standard';
+  filterByAuthorizedAccounts?: boolean;
+  expectedEmail?: string | null;
 };
 
 const parseStoredToken = (raw: string | null) => {
@@ -455,10 +503,7 @@ export const useGoogleAuth = () => {
   }, [applyAccessToken]);
 
   const nativeSignInWithScopes = useCallback(
-    async (
-      scopes: string[],
-      options?: { style?: 'bottom' | 'standard'; filterByAuthorizedAccounts?: boolean }
-    ) => {
+    async (scopes: string[], options?: NativeGoogleSignInOptions) => {
       await ensureNativeSocialLogin();
       let response;
       try {
@@ -489,6 +534,11 @@ export const useGoogleAuth = () => {
       if (!idToken) {
         throw new Error('Google sign-in did not return an ID token.');
       }
+      const expectedEmail = normalizeEmail(options?.expectedEmail);
+      const authenticatedEmail = getGoogleAccountEmailFromIdToken(idToken);
+      if (expectedEmail && authenticatedEmail !== expectedEmail) {
+        throw new Error(GOOGLE_ACCOUNT_MISMATCH_MESSAGE);
+      }
       const credential = GoogleAuthProvider.credential(idToken, nextAccessToken || undefined);
       const authResult = await signInWithCredential(auth, credential);
       applyAccessToken(nextAccessToken);
@@ -496,6 +546,26 @@ export const useGoogleAuth = () => {
     },
     [applyAccessToken, auth]
   );
+
+  const forceSessionLogout = useCallback(async (reason?: string) => {
+    setLoading(true);
+    try {
+      await tryNativeLogout();
+      await signOut(auth);
+    } catch {
+      // Ignore sign-out failures; we'll still clear local state.
+    } finally {
+      setAccessToken(null);
+      setAccessTokenExpiresAt(null);
+      persistToken(null);
+      updateSessionStart(null);
+      setTokenExpired(false);
+      setUser(null);
+      setAndroidDriveScopeGranted(true);
+      setLoading(false);
+      setError(reason || null);
+    }
+  }, [auth, updateSessionStart]);
 
   const refreshAccessToken = useCallback(
     async (options?: { interactive?: boolean; force?: boolean }) => {
@@ -574,11 +644,16 @@ export const useGoogleAuth = () => {
         try {
           const result = await nativeSignInWithScopes(GOOGLE_SCOPES, {
             style: IS_ANDROID ? 'standard' : 'bottom',
-            filterByAuthorizedAccounts: IS_ANDROID ? false : undefined
+            filterByAuthorizedAccounts: IS_ANDROID ? false : undefined,
+            expectedEmail: getGoogleUserEmail(user)
           });
           setAndroidDriveScopeGranted(true);
           return result.accessToken;
         } catch (err) {
+          if (isGoogleAccountMismatchError(err)) {
+            await forceSessionLogout(formatNativeGoogleAuthError(err, 'drive'));
+            return null;
+          }
           setAndroidDriveScopeGranted(false);
           setError(formatNativeGoogleAuthError(err, 'drive'));
           return null;
@@ -603,28 +678,15 @@ export const useGoogleAuth = () => {
 
       return current;
     },
-    [androidDriveScopeGranted, expireToken, nativeSignInWithScopes, refreshAccessToken, user]
+    [
+      androidDriveScopeGranted,
+      expireToken,
+      forceSessionLogout,
+      nativeSignInWithScopes,
+      refreshAccessToken,
+      user
+    ]
   );
-
-  const forceSessionLogout = useCallback(async (reason?: string) => {
-    setLoading(true);
-    try {
-      await tryNativeLogout();
-      await signOut(auth);
-    } catch {
-      // Ignore sign-out failures; we'll still clear local state.
-    } finally {
-      setAccessToken(null);
-      setAccessTokenExpiresAt(null);
-      persistToken(null);
-      updateSessionStart(null);
-      setTokenExpired(false);
-      setUser(null);
-      setAndroidDriveScopeGranted(true);
-      setLoading(false);
-      setError(reason || null);
-    }
-  }, [auth, updateSessionStart]);
 
   useEffect(() => {
     let active = true;
@@ -710,8 +772,15 @@ export const useGoogleAuth = () => {
           style: IS_ANDROID ? 'standard' : 'bottom',
           filterByAuthorizedAccounts: IS_ANDROID ? false : undefined
         });
+        if (IS_ANDROID) {
+          await nativeSignInWithScopes(GOOGLE_SCOPES, {
+            style: 'standard',
+            filterByAuthorizedAccounts: false,
+            expectedEmail: getGoogleUserEmail(authResult.user)
+          });
+        }
         updateSessionStart(Date.now());
-        setAndroidDriveScopeGranted(!IS_ANDROID);
+        setAndroidDriveScopeGranted(true);
         void notifyAuthEmail(authResult.user);
         return;
       }
@@ -724,6 +793,9 @@ export const useGoogleAuth = () => {
         void notifyAuthEmail(result.user);
       }
     } catch (err) {
+      if (IS_NATIVE && auth.currentUser) {
+        await forceSessionLogout();
+      }
       setError(formatNativeGoogleAuthError(err, 'signin'));
     } finally {
       setLoading(false);
@@ -760,7 +832,6 @@ export const useGoogleAuth = () => {
     signOut: signOutUser
   };
 };
-
 
 
 
