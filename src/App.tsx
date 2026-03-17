@@ -171,6 +171,7 @@ const App = () => {
   const [driveFileId, setDriveFileId] = useState('');
   const [syncState, setSyncState] = useState<'idle' | 'loading' | 'saving' | 'error'>('idle');
   const [syncMessage, setSyncMessage] = useState('');
+  const [resumeNonce, setResumeNonce] = useState(0);
   const [driveImageUrls, setDriveImageUrls] = useState<Record<string, string>>({});
   const driveImageCacheRef = useRef(new Map<string, string>());
   const driveImageLoadsRef = useRef(new Map<string, Promise<string>>());
@@ -510,6 +511,26 @@ const App = () => {
   }, []);
 
   useEffect(() => {
+    const triggerResume = () => {
+      if (document.visibilityState === 'hidden') return;
+      setResumeNonce((current) => current + 1);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
+      triggerResume();
+    };
+
+    window.addEventListener('focus', triggerResume);
+    window.addEventListener('pageshow', triggerResume);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', triggerResume);
+      window.removeEventListener('pageshow', triggerResume);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!isLoggedIn) {
       const resetStateTimer = window.setTimeout(() => {
         setEntries([]);
@@ -528,10 +549,14 @@ const App = () => {
       failedDriveImageRef.current.clear();
       return () => window.clearTimeout(resetStateTimer);
     }
+    if (authLoading) return;
 
     let cancelled = false;
     const load = async () => {
+      setSyncState('loading');
+      setSyncMessage(IS_ANDROID ? 'Restoring Google session...' : 'Loading from Google Drive...');
       const token = await resolveDriveToken(IS_ANDROID, IS_ANDROID);
+      if (cancelled) return;
       if (!token) {
         if (!cancelled && IS_ANDROID) {
           setSyncState('error');
@@ -539,7 +564,6 @@ const App = () => {
         }
         return;
       }
-      setSyncState('loading');
       setSyncMessage('Loading from Google Drive...');
       let resolvedFileId = '';
       const loadFromDrive = async (driveToken: string) => {
@@ -570,7 +594,7 @@ const App = () => {
     return () => {
       cancelled = true;
     };
-  }, [IS_ANDROID, isLoggedIn, resolveDriveToken, runDriveOperationWithScopeRetry]);
+  }, [IS_ANDROID, authLoading, isLoggedIn, resolveDriveToken, resumeNonce, runDriveOperationWithScopeRetry]);
 
   useEffect(() => {
     const activeIds = new Set(
