@@ -1,4 +1,7 @@
 apply plugin: 'com.android.application'
+apply plugin: 'com.github.triplet.play'
+
+import com.github.triplet.gradle.androidpublisher.ReleaseStatus
 
 def androidVersionCodeValue = System.getenv("ANDROID_VERSION_CODE") ?: "2"
 def androidVersionCodeNumber
@@ -9,6 +12,8 @@ try {
 }
 
 def androidVersionNameValue = System.getenv("ANDROID_VERSION_NAME") ?: "1.0.1"
+def googlePlayTrackValue = System.getenv("GOOGLE_PLAY_TRACK") ?: "internal"
+def googlePlayCredentialsPath = System.getenv("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH")
 
 def hasCiSigning = System.getenv("ANDROID_KEYSTORE_PASSWORD") &&
         System.getenv("ANDROID_KEY_ALIAS") &&
@@ -72,6 +77,16 @@ dependencies {
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
     implementation project(':capacitor-cordova-android-plugins')
+}
+
+play {
+    defaultToAppBundles.set(true)
+    track.set(googlePlayTrackValue)
+    releaseStatus.set(ReleaseStatus.COMPLETED)
+
+    if (googlePlayCredentialsPath) {
+        serviceAccountCredentials.set(file(googlePlayCredentialsPath))
+    }
 }
 
 apply from: 'capacitor.build.gradle'

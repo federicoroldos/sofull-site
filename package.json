@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "android:dev": "vite --host",
     "android:build": "tsc -b && vite build --base ./ && npx cap sync android",
+    "android:release:internal": "node scripts/android-release-internal.mjs",
     "android:open": "npx cap open android",
     "lint": "eslint .",
     "scan:secrets": "node scripts/scan-secrets.mjs",
