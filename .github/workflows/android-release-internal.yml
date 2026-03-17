@@ -26,6 +26,9 @@ permissions:
 jobs:
   release-internal:
     runs-on: ubuntu-latest
+    env:
+      ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/sofull-release.jks
+      GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH: ${{ runner.temp }}/google-play-service-account.json
 
     steps:
       - name: Checkout
@@ -47,7 +50,16 @@ jobs:
       - name: Decode Android keystore
         shell: bash
         run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/sofull-release.jks"
+          set -euo pipefail
+          umask 077
+          printf '%s' "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
+
+      - name: Write Google Play service account
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}" > "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH"
 
       - name: Show upload certificate fingerprints
         shell: bash
@@ -55,7 +67,7 @@ jobs:
           set -euo pipefail
           keytool -list -v \
             -alias "${{ secrets.ANDROID_KEY_ALIAS }}" \
-            -keystore "$RUNNER_TEMP/sofull-release.jks" \
+            -keystore "$ANDROID_KEYSTORE_PATH" \
             -storepass "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
             -keypass "${{ secrets.ANDROID_KEY_PASSWORD }}" | awk '/Alias name:|SHA1:|SHA256:/{print}'
 
@@ -67,11 +79,10 @@ jobs:
 
       - name: Publish Android AAB to Google Play internal testing
         env:
-          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/sofull-release.jks
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH: ${{ env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH }}
           GOOGLE_PLAY_TRACK: ${{ inputs.google_play_track }}
           GOOGLE_PLAY_RELEASE_STATUS: ${{ inputs.google_play_release_status }}
           ANDROID_VERSION_NAME: ${{ inputs.android_version_name }}
@@ -83,3 +94,8 @@ jobs:
           VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
           VITE_GOOGLE_WEB_CLIENT_ID: ${{ secrets.VITE_GOOGLE_WEB_CLIENT_ID }}
         run: npm run android:release:internal
+
+      - name: Clean up release secrets
+        if: always()
+        shell: bash
+        run: rm -f "$ANDROID_KEYSTORE_PATH" "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH"
