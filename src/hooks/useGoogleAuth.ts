@@ -53,9 +53,35 @@ const AUTH_EMAIL_ENDPOINT = import.meta.env.VITE_AUTH_EMAIL_ENDPOINT;
 const GOOGLE_WEB_CLIENT_ID = import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID;
 const WEB_DEVICE_ID_KEY = 'sofull-web-device-id';
 const TOKEN_EXPIRY_POLL_MS = 10 * 1000;
+const DEFAULT_NATIVE_AUTH_TIMEOUT_MS = 15 * 1000;
+const NATIVE_AUTH_TIMEOUT_MS = (() => {
+  const raw = Number(import.meta.env.VITE_NATIVE_AUTH_TIMEOUT_MS);
+  if (Number.isFinite(raw) && raw > 0) return raw;
+  return DEFAULT_NATIVE_AUTH_TIMEOUT_MS;
+})();
 const IS_NATIVE = Capacitor.isNativePlatform();
 const IS_ANDROID = Capacitor.getPlatform() === 'android';
 let socialLoginInitialized = false;
+
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: string) => {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return promise;
+  return await new Promise<T>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+
+    promise.then(
+      (value) => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      }
+    );
+  });
+};
 
 const isAccountReauthFailure = (err: unknown) => {
   const message = err instanceof Error ? err.message : String(err ?? '');
@@ -63,6 +89,12 @@ const isAccountReauthFailure = (err: unknown) => {
 };
 
 const formatNativeGoogleAuthError = (err: unknown, context: 'signin' | 'drive') => {
+  const message = err instanceof Error ? err.message : String(err ?? '');
+  if (/\b(timed out|timeout)\b/i.test(message)) {
+    return context === 'drive'
+      ? 'Google Drive session restore timed out. Sign in again to continue syncing.'
+      : 'Google Sign-In timed out. Try again.';
+  }
   if (isAccountReauthFailure(err)) {
     if (context === 'drive') {
       return 'Google Drive authorization could not be completed on this device. Verify the Android OAuth client package name and SHA-1/SHA-256. If this build came from Google Play, use the Play App Signing certificate fingerprints from Play Console > App integrity. Also confirm the Google web client ID for this build, then try again.';
@@ -80,12 +112,16 @@ const ensureNativeSocialLogin = async () => {
   if (!GOOGLE_WEB_CLIENT_ID) {
     throw new Error('Missing VITE_GOOGLE_WEB_CLIENT_ID for native Google Sign-In.');
   }
-  await SocialLogin.initialize({
-    google: {
-      webClientId: GOOGLE_WEB_CLIENT_ID,
-      mode: 'online'
-    }
-  });
+  await withTimeout(
+    SocialLogin.initialize({
+      google: {
+        webClientId: GOOGLE_WEB_CLIENT_ID,
+        mode: 'online'
+      }
+    }),
+    NATIVE_AUTH_TIMEOUT_MS,
+    'Google Sign-In initialization timed out.'
+  );
   socialLoginInitialized = true;
 };
 
@@ -93,7 +129,11 @@ const tryNativeLogout = async () => {
   if (!IS_NATIVE) return;
   try {
     await ensureNativeSocialLogin();
-    await SocialLogin.logout({ provider: 'google' });
+    await withTimeout(
+      SocialLogin.logout({ provider: 'google' }),
+      NATIVE_AUTH_TIMEOUT_MS,
+      'Google Sign-Out timed out.'
+    );
   } catch {
     // Ignore native logout failures.
   }
@@ -422,14 +462,18 @@ export const useGoogleAuth = () => {
       await ensureNativeSocialLogin();
       let response;
       try {
-        response = await SocialLogin.login({
-          provider: 'google',
-          options: {
-            style: options?.style ?? 'bottom',
-            filterByAuthorizedAccounts: options?.filterByAuthorizedAccounts,
-            scopes
-          }
-        });
+        response = await withTimeout(
+          SocialLogin.login({
+            provider: 'google',
+            options: {
+              style: options?.style ?? 'bottom',
+              filterByAuthorizedAccounts: options?.filterByAuthorizedAccounts,
+              scopes
+            }
+          }),
+          NATIVE_AUTH_TIMEOUT_MS,
+          'Google Sign-In timed out.'
+        );
       } catch (err) {
         throw new Error(formatNativeGoogleAuthError(err, scopes === GOOGLE_SCOPES ? 'drive' : 'signin'));
       }
@@ -461,14 +505,22 @@ export const useGoogleAuth = () => {
             await ensureNativeSocialLogin();
             try {
               const scopes = IS_ANDROID && !androidDriveScopeGranted ? BASIC_SCOPES : GOOGLE_SCOPES;
-              await SocialLogin.refresh({
-                provider: 'google',
-                options: { scopes, forceRefreshToken: true }
-              });
+              await withTimeout(
+                SocialLogin.refresh({
+                  provider: 'google',
+                  options: { scopes, forceRefreshToken: true }
+                }),
+                NATIVE_AUTH_TIMEOUT_MS,
+                'Google session refresh timed out.'
+              );
             } catch {
               // Ignore refresh failures and fall back to authorization code.
             }
-            const authorization = await SocialLogin.getAuthorizationCode({ provider: 'google' });
+            const authorization = await withTimeout(
+              SocialLogin.getAuthorizationCode({ provider: 'google' }),
+              NATIVE_AUTH_TIMEOUT_MS,
+              'Google session restore timed out.'
+            );
             const accessToken = authorization.accessToken ?? null;
             if (accessToken) {
               applyAccessToken(accessToken);
