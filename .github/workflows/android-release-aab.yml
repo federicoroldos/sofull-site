@@ -13,13 +13,16 @@ jobs:
   build-release-artifacts:
     runs-on: ubuntu-latest
     env:
-      ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/ci-keystore.jks
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+
+      - name: Set temporary Android paths
+        shell: bash
+        run: echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/ci-keystore.jks" >> "$GITHUB_ENV"
 
       - name: Set up Node
         uses: actions/setup-node@v6
