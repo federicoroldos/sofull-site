@@ -48,6 +48,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Make Gradle wrapper executable
+        run: chmod +x android/gradlew
+
       - name: Publish Android AAB to Google Play internal testing
         env:
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/sofull-release.jks
