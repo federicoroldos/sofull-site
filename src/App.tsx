@@ -233,12 +233,14 @@ const App = () => {
   const [syncState, setSyncState] = useState<'idle' | 'loading' | 'saving' | 'error'>('idle');
   const [syncMessage, setSyncMessage] = useState('');
   const [resumeNonce, setResumeNonce] = useState(0);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [driveImageUrls, setDriveImageUrls] = useState<Record<string, string>>({});
   const driveImageCacheRef = useRef(new Map<string, string>());
   const driveImageLoadsRef = useRef(new Map<string, Promise<string>>());
   const failedDriveImageRef = useRef(new Set<string>());
   const imageFolderIdRef = useRef<string | null>(null);
   const reconnectButtonRef = useRef<HTMLButtonElement>(null);
+  const aboutCloseButtonRef = useRef<HTMLButtonElement>(null);
 
   const IS_NATIVE = Capacitor.isNativePlatform();
   const IS_ANDROID = Capacitor.getPlatform() === 'android';
@@ -451,8 +453,19 @@ const App = () => {
     let nextImageName = editingEntry?.imageName || '';
     let nextImageUrl = values.imageUrl;
 
+    const evictCachedImage = (fileId: string) => {
+      const cached = driveImageCacheRef.current.get(fileId);
+      if (cached) {
+        URL.revokeObjectURL(cached);
+        driveImageCacheRef.current.delete(fileId);
+      }
+      driveImageLoadsRef.current.delete(fileId);
+      failedDriveImageRef.current.delete(fileId);
+    };
+
     if (values.clearImage) {
       if (editingEntry?.imageDriveFileId) {
+        evictCachedImage(editingEntry.imageDriveFileId);
         await deleteDriveFile(token, editingEntry.imageDriveFileId);
       }
       nextImageDriveFileId = '';
@@ -474,7 +487,12 @@ const App = () => {
       nextImageDriveFileId = uploadedImage.id;
       nextImageMimeType = uploadedImage.mimeType;
       nextImageName = uploadedImage.name;
+      const optimisticUrl = URL.createObjectURL(values.imageFile);
+      evictCachedImage(uploadedImage.id);
+      driveImageCacheRef.current.set(uploadedImage.id, optimisticUrl);
+      setDriveImageUrls((prev) => ({ ...prev, [uploadedImage.id]: optimisticUrl }));
       if (editingEntry?.imageDriveFileId) {
+        evictCachedImage(editingEntry.imageDriveFileId);
         await deleteDriveFile(token, editingEntry.imageDriveFileId);
       }
     }
@@ -750,6 +768,19 @@ const App = () => {
     return () => window.removeEventListener('keydown', onKey);
   }, [tokenExpired, clearTokenExpired]);
 
+  useEffect(() => {
+    if (!aboutOpen) return;
+    aboutCloseButtonRef.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setAboutOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [aboutOpen]);
+
   return (
     <div className="app">
       <header className="app__header">
@@ -948,10 +979,63 @@ const App = () => {
       <footer className="app__footer">
         <span>© 2026 Federico Roldós. All rights reserved.</span>
         <div className="app__footer-links">
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => setAboutOpen(true)}
+          >
+            About
+          </button>
           <a href="/privacy.html">Privacy Policy</a>
           <a href="/terms.html">Terms of Service</a>
         </div>
       </footer>
+
+      {aboutOpen && (
+        <div className="modal" role="dialog" aria-modal="true" aria-labelledby="about-title">
+          <div className="modal__backdrop" onClick={() => setAboutOpen(false)} />
+          <div className="modal__content">
+            <header className="modal__header">
+              <h2 id="about-title">About 배불러! (So Full!)</h2>
+            </header>
+            <p>
+              A personal food + drink log focused on Korean ramyeon, snacks, drinks, and ice cream.
+              Rate what you've tried, sort by spice, crunch, sweet, or creaminess, and keep notes on
+              your favorites.
+            </p>
+            <p>
+              <strong>Your data lives in your Google Drive.</strong> The catalog is a single JSON
+              file in the app's appdata folder; uploaded photos go to a folder you can see. There is
+              no shared backend database — every account stores its own list, end of story.
+            </p>
+            <p>
+              <strong>No tracking, no analytics.</strong> The serverless API only exists to send the
+              welcome and login email so you know when your account is used.
+            </p>
+            <p>
+              Open source on{' '}
+              <a
+                href="https://github.com/federicoroldos/sofull-site"
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                GitHub
+              </a>
+              . Built with React, Vite, Firebase Auth, and Google Drive.
+            </p>
+            <div className="modal__footer">
+              <button
+                ref={aboutCloseButtonRef}
+                type="button"
+                className="button"
+                onClick={() => setAboutOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
