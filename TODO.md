@@ -1,14 +1,14 @@
-# TODO — Polish Roadmap
+# TODO: Polish Roadmap
 
 Punch list of everything to fix before this is "CV-quality". Grouped by priority. Tick the boxes as we land each item; each line is small enough to be one PR.
 
-## P0 — Active bugs
+## P0: Active bugs
 
 - [x] **`toEmail` is undefined in the email error logger.** Renamed to `recipient: email`; the logger now references a variable in scope and the field name doesn't collide with the SDK key.
 
 - [x] **Misleading "Session expired" modal.** Reworded to "Reconnect Google Drive" and wired the Reconnect button to `reconnectDrive()` (silent → interactive → full `signIn` fallback). Pairs with the silent-refresh work below.
 
-## P1 — Inconsistencies / UX
+## P1: Inconsistencies / UX
 
 - [x] **Email gate divergence between web and Android.** Generalized `shouldSendLoginEmail` to both platforms. Native uses `Capacitor.Device.getId()` cached in `sofull-native-device-id`; web keeps the UUID in `sofull-web-device-id`. Firestore doc layout unchanged.
 
@@ -20,7 +20,7 @@ Punch list of everything to fix before this is "CV-quality". Grouped by priority
 
 - [x] **`onAuthStateChanged` null branch nukes localStorage.** Guarded with `hadAuthenticatedUserRef`: the clear only runs when transitioning from authed → null (real sign-out), not on first fire.
 
-## P2 — Dead code / cleanup
+## P2: Dead code / cleanup
 
 - [x] **Brevo leftovers.** Removed from `SENSITIVE_KEYS` and `scan-secrets.mjs`. Added Resend pattern in its place.
 
@@ -34,7 +34,7 @@ Punch list of everything to fix before this is "CV-quality". Grouped by priority
 
 - [x] **`accessTokenExpiresAt` exported but unused.** Trimmed from the hook's return type.
 
-## P3 — Nice-to-have / portfolio polish
+## P3: Nice-to-have / portfolio polish
 
 - [x] **Add a `/about` modal or footer link** with the product story. Footer has an "About" button that opens a modal explaining the single-user, your-Drive-your-data model, no backend, no tracking. Focus + Escape wired.
 
@@ -56,7 +56,7 @@ Punch list of everything to fix before this is "CV-quality". Grouped by priority
 
 - [ ] **End-to-end smoke test** (Playwright) for sign-in → add → reload → see entry. Even one test is enough to mention in the CV.
 
-## P4 — Future considerations (not blocking)
+## P4: Future considerations (not blocking)
 
 - [ ] Native iOS build via Capacitor (Apple developer account needed; out of scope unless prioritized).
 - [ ] PWA install prompt + offline shell. Drive ops can't be offline, but the UI can render cached entries.
@@ -72,6 +72,6 @@ When picking up an item:
 1. Open this file and the section of [CLAUDE.md](CLAUDE.md) the item touches.
 2. Make the change small and targeted; one item per PR.
 3. Tick the box, commit. Commit message style: lowercase verb, no scope (`fix toEmail referenceerror in email error logger`).
-4. If you discover a new issue while fixing one, append it under the right priority section — don't sneak it into the current PR.
+4. If you discover a new issue while fixing one, append it under the right priority section, don't sneak it into the current PR.
 
 Priorities can be re-ordered; nothing here is sacred except P0 staying P0 until shipped.
