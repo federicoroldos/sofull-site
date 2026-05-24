@@ -646,10 +646,24 @@ textarea {
   flex-wrap: wrap;
 }
 
-.app__footer a {
+.app__footer a,
+.app__footer .link-button {
   color: var(--outline);
   font-weight: 700;
   text-decoration: underline;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.link-button:hover,
+.link-button:focus-visible {
+  color: var(--accent-dark);
 }
 
 

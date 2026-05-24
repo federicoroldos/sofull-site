@@ -36,19 +36,19 @@ Punch list of everything to fix before this is "CV-quality". Grouped by priority
 
 ## P3 — Nice-to-have / portfolio polish
 
-- [ ] **Add a `/about` modal or footer link** with the product story — single-user, your-Drive-your-data, no backend, no tracking. Good for a CV demo.
+- [x] **Add a `/about` modal or footer link** with the product story. Footer has an "About" button that opens a modal explaining the single-user, your-Drive-your-data model, no backend, no tracking. Focus + Escape wired.
 
 - [x] **Add a real loading skeleton** for the entry list while the first Drive load is in flight. Three shimmer cards while `syncState === 'loading' && entries.length === 0`. Respects `prefers-reduced-motion`.
 
 - [x] **Empty-state CTA** when logged in with zero entries. Centered title + paragraph + Add-first-item button.
 
-- [ ] **Optimistic image preview** during upload (today we wait for Drive). The blob URL is already in memory in the form modal.
+- [x] **Optimistic image preview** after Save. The blob URL the form already creates is now also seeded into `driveImageCacheRef` keyed by the new Drive file id, so the new card renders the image instantly instead of going through a re-download.
 
 - [ ] **A11y pass.** Initial round done: status bar has `aria-live="polite"`, entry images use a descriptive alt with the entry name and `loading="lazy"`, the picture-less placeholder is `aria-hidden`, and the Reconnect modal traps initial focus + closes on Escape. Still pending: full axe / Lighthouse run, focus trap in the entry form modal, keyboard-reachable rating inputs.
 
-- [ ] **README badges**: Pages deploy status, Android workflow status, license. Cheap credibility signal.
+- [x] **README badges**: Pages deploy + Live demo + built-with chip. Android workflow badge skipped since it's manual (`workflow_dispatch`) and would render as "no runs".
 
-- [ ] **Screenshots in README.** A grid of mobile + web + an entry-card detail. People skim READMEs.
+- [~] **Screenshots in README.** Section added with placeholder structure and `docs/screenshots/README.md` documenting the expected filenames and sizing. Waiting on user-provided captures to drop into `docs/screenshots/` and uncomment the table.
 
 - [ ] **Lighthouse audit + perf budget**. The whole bundle is small, but locking in a budget in CI is a portfolio plus.
 
