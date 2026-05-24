@@ -22,23 +22,53 @@ const DEFAULT_DATA: SofullDataFile = {
   entries: []
 };
 
+const DEMO_TIMESTAMP = '2026-01-01T00:00:00.000Z';
+
 const demoEntries: SofullEntry[] = [
   {
     id: 'demo-1',
     name: '신라면',
     nameEnglish: 'Shin Ramyeon',
+    brand: 'Nongshim',
+    category: 'ramyeon',
+    formFactor: 'packet',
+    iceCreamFormFactor: 'bar',
+    rating: 4.5,
+    spiciness: 'hot',
+    description: 'Clean beefy broth, gentle spice, and a chewy bite.',
+    createdAt: DEMO_TIMESTAMP,
+    updatedAt: DEMO_TIMESTAMP
+  },
+  {
+    id: 'demo-2',
+    name: '진라면 매운맛',
+    nameEnglish: 'Jin Ramyeon Spicy',
     brand: 'Ottogi',
     category: 'ramyeon',
+    formFactor: 'cup',
+    iceCreamFormFactor: 'bar',
+    rating: 4,
+    spiciness: 'medium',
+    description: 'Lighter than Shin, more savory. Easy weeknight pick.',
+    createdAt: DEMO_TIMESTAMP,
+    updatedAt: DEMO_TIMESTAMP
+  },
+  {
+    id: 'demo-3',
+    name: '새우깡',
+    nameEnglish: 'Saewookkang',
+    brand: 'Nongshim',
+    category: 'snack',
     formFactor: 'packet',
     iceCreamFormFactor: 'bar',
     rating: 4,
     spiciness: 'medium',
-    description: 'Clean beefy broth, gentle spice, and a chewy bite.',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    description: 'Shrimp-flavored crackers. Light, salty, classic.',
+    createdAt: DEMO_TIMESTAMP,
+    updatedAt: DEMO_TIMESTAMP
   },
   {
-    id: 'demo-2',
+    id: 'demo-4',
     name: '바나나우유',
     nameEnglish: 'Banana Milk',
     brand: 'Binggrae',
@@ -47,9 +77,37 @@ const demoEntries: SofullEntry[] = [
     iceCreamFormFactor: 'cream',
     rating: 5,
     spiciness: 'hot',
-    description: 'Sweet, creamy, banana-flavored milk.',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    description: 'Sweet, creamy, banana-flavored milk in the iconic pot bottle.',
+    createdAt: DEMO_TIMESTAMP,
+    updatedAt: DEMO_TIMESTAMP
+  },
+  {
+    id: 'demo-5',
+    name: '메로나',
+    nameEnglish: 'Melona',
+    brand: 'Binggrae',
+    category: 'ice_cream',
+    formFactor: 'packet',
+    iceCreamFormFactor: 'bar',
+    rating: 5,
+    spiciness: 'extreme',
+    description: 'Melon ice bar. Smooth, fragrant, summer staple.',
+    createdAt: DEMO_TIMESTAMP,
+    updatedAt: DEMO_TIMESTAMP
+  },
+  {
+    id: 'demo-6',
+    name: '쿠앤크',
+    nameEnglish: 'Cookies & Cream',
+    brand: 'Lotte',
+    category: 'ice_cream',
+    formFactor: 'packet',
+    iceCreamFormFactor: 'cream',
+    rating: 4,
+    spiciness: 'hot',
+    description: 'Cookies-and-cream tub. Creamy base with crunchy cookie chunks.',
+    createdAt: DEMO_TIMESTAMP,
+    updatedAt: DEMO_TIMESTAMP
   }
 ];
 
@@ -180,6 +238,7 @@ const App = () => {
   const driveImageLoadsRef = useRef(new Map<string, Promise<string>>());
   const failedDriveImageRef = useRef(new Set<string>());
   const imageFolderIdRef = useRef<string | null>(null);
+  const reconnectButtonRef = useRef<HTMLButtonElement>(null);
 
   const IS_NATIVE = Capacitor.isNativePlatform();
   const IS_ANDROID = Capacitor.getPlatform() === 'android';
@@ -678,6 +737,19 @@ const App = () => {
     };
   }, [IS_NATIVE, entries, accessToken, resolveDriveToken]);
 
+  useEffect(() => {
+    if (!tokenExpired) return;
+    reconnectButtonRef.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        clearTokenExpired();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [tokenExpired, clearTokenExpired]);
+
   return (
     <div className="app">
       <header className="app__header">
@@ -772,22 +844,47 @@ const App = () => {
 
       <section className="status">
         {!isLoggedIn && (
-          <p className={`status__message ${authError ? 'status__message--error' : ''}`}>
+          <p
+            className={`status__message ${authError ? 'status__message--error' : ''}`}
+            aria-live="polite"
+          >
             {authError || 'Sign in to add, edit, and sync your food & drink list.'}
           </p>
         )}
         {isLoggedIn && (
-          <p className={`status__message status__message--${syncState}`}>
+          <p
+            className={`status__message status__message--${syncState}`}
+            aria-live="polite"
+          >
             {syncMessage || 'Drive sync ready.'}
           </p>
         )}
       </section>
 
       <main className="list">
-        {visibleEntries.length === 0 ? (
+        {isLoggedIn && syncState === 'loading' && entries.length === 0 ? (
+          <div className="list__skeleton" aria-hidden="true">
+            {Array.from({ length: 3 }).map((_, idx) => (
+              <div key={idx} className="entry-card entry-card--skeleton">
+                <div className="entry-card__image" />
+                <div className="entry-card__content">
+                  <div className="skeleton-line skeleton-line--title" />
+                  <div className="skeleton-line skeleton-line--meta" />
+                  <div className="skeleton-line skeleton-line--body" />
+                  <div className="skeleton-line skeleton-line--body skeleton-line--short" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : visibleEntries.length === 0 ? (
           <div className="empty-state">
-            <p>No entries yet.</p>
-            <p>Add your first item to start your list.</p>
+            <h2 className="empty-state__title">No entries yet</h2>
+            <p>Start your list by adding the first item you tried.</p>
+            {isLoggedIn && (
+              <button className="button" type="button" onClick={openCreate}>
+                Add your first item
+              </button>
+            )}
           </div>
         ) : (
           visibleEntries.map((entry) => (
@@ -827,6 +924,7 @@ const App = () => {
                 Dismiss
               </button>
               <button
+                ref={reconnectButtonRef}
                 className="button"
                 onClick={() => {
                   if (authLoading) return;

@@ -38,13 +38,13 @@ Punch list of everything to fix before this is "CV-quality". Grouped by priority
 
 - [ ] **Add a `/about` modal or footer link** with the product story — single-user, your-Drive-your-data, no backend, no tracking. Good for a CV demo.
 
-- [ ] **Add a real loading skeleton** for the entry list while the first Drive load is in flight. Today it just says "Loading from Google Drive..." in plain text.
+- [x] **Add a real loading skeleton** for the entry list while the first Drive load is in flight. Three shimmer cards while `syncState === 'loading' && entries.length === 0`. Respects `prefers-reduced-motion`.
 
-- [ ] **Empty-state CTA** when logged in with zero entries — currently shows "Add your first item to start your list." but the button is in the toolbar; a centered CTA in the empty state would help.
+- [x] **Empty-state CTA** when logged in with zero entries. Centered title + paragraph + Add-first-item button.
 
 - [ ] **Optimistic image preview** during upload (today we wait for Drive). The blob URL is already in memory in the form modal.
 
-- [ ] **A11y pass.** Run axe / Lighthouse and address. The modal's focus trap, alt text on entry images, and aria-live for sync status are the obvious gaps.
+- [ ] **A11y pass.** Initial round done: status bar has `aria-live="polite"`, entry images use a descriptive alt with the entry name and `loading="lazy"`, the picture-less placeholder is `aria-hidden`, and the Reconnect modal traps initial focus + closes on Escape. Still pending: full axe / Lighthouse run, focus trap in the entry form modal, keyboard-reachable rating inputs.
 
 - [ ] **README badges**: Pages deploy status, Android workflow status, license. Cheap credibility signal.
 
@@ -52,7 +52,7 @@ Punch list of everything to fix before this is "CV-quality". Grouped by priority
 
 - [ ] **Lighthouse audit + perf budget**. The whole bundle is small, but locking in a budget in CI is a portfolio plus.
 
-- [ ] **Demo mode polish.** Logged-out demo entries are hardcoded in `App.tsx:25-54`. Expand to 4-6 entries covering all categories so reviewers see the full UI before signing in.
+- [x] **Demo mode polish.** Six entries hardcoded, covering all four categories with realistic Korean brand/name choices.
 
 - [ ] **End-to-end smoke test** (Playwright) for sign-in → add → reload → see entry. Even one test is enough to mention in the CV.
 

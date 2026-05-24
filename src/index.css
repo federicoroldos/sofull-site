@@ -513,9 +513,92 @@ textarea {
 .empty-state {
   border: 2px dashed var(--outline);
   border-radius: 16px;
-  padding: 28px;
+  padding: 36px 28px;
   text-align: center;
   color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
+
+.empty-state__title {
+  margin: 0;
+  font-size: 22px;
+  color: var(--ink);
+}
+
+.empty-state .button {
+  margin-top: 6px;
+}
+
+.list__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.entry-card--skeleton {
+  pointer-events: none;
+}
+
+.entry-card--skeleton .entry-card__image {
+  background: linear-gradient(
+    90deg,
+    var(--paper-accent) 0%,
+    rgba(255, 255, 255, 0.6) 50%,
+    var(--paper-accent) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s linear infinite;
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: 8px;
+  background: linear-gradient(
+    90deg,
+    var(--paper-accent) 0%,
+    rgba(255, 255, 255, 0.6) 50%,
+    var(--paper-accent) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s linear infinite;
+}
+
+.skeleton-line--title {
+  height: 20px;
+  width: 55%;
+}
+
+.skeleton-line--meta {
+  width: 35%;
+  margin-top: 4px;
+}
+
+.skeleton-line--body {
+  width: 90%;
+  margin-top: 8px;
+}
+
+.skeleton-line--short {
+  width: 65%;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .entry-card--skeleton .entry-card__image,
+  .skeleton-line {
+    animation: none;
+  }
 }
 
 .modal {
