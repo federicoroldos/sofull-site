@@ -2,7 +2,6 @@
 const DOWNLOAD_URL = 'https://www.googleapis.com/drive/v3/files';
 const FILES_URL = 'https://www.googleapis.com/drive/v3/files';
 const BACKUP_FILENAME = 'sofull.json';
-const LEGACY_BACKUP_FILENAME = 'ramyeon-dictionary.json';
 
 const handleDriveError = async (response: Response, fallback: string) => {
   const errorText = await response.text();
@@ -55,26 +54,9 @@ const listAppDataFileId = async (token: string, name: string) => {
   return listData.files?.[0]?.id ?? null;
 };
 
-const migrateLegacyAppDataFile = async (token: string, legacyId: string) => {
-  const content = await downloadFromAppData(token, legacyId);
-  const newId = await createAppDataFile(token, BACKUP_FILENAME);
-  await uploadToAppData(token, newId, content || '');
-  return newId;
-};
-
 export const ensureAppDataFile = async (token: string, name = BACKUP_FILENAME) => {
   const primaryId = await listAppDataFileId(token, name);
   if (primaryId) return primaryId;
-  if (name === BACKUP_FILENAME) {
-    const legacyId = await listAppDataFileId(token, LEGACY_BACKUP_FILENAME);
-    if (legacyId) {
-      try {
-        return await migrateLegacyAppDataFile(token, legacyId);
-      } catch {
-        return legacyId;
-      }
-    }
-  }
   return createAppDataFile(token, name);
 };
 

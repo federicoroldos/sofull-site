@@ -23,8 +23,8 @@ const patterns = [
     regex: /AIza[0-9A-Za-z_-]{35}/g
   },
   {
-    name: 'Brevo API key',
-    regex: /xkeysib-[0-9a-zA-Z]{10,}/g
+    name: 'Resend API key',
+    regex: /\bre_[A-Za-z0-9]{8,}_[A-Za-z0-9]{20,}\b/g
   },
   {
     name: 'Stripe live key',

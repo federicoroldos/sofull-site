@@ -4,9 +4,6 @@ const config: CapacitorConfig = {
   appId: 'com.sofull.site',
   appName: '배불러! (So Full!)',
   webDir: 'dist',
-  server: {
-    cleartext: true
-  },
   plugins: {
     SocialLogin: {
       providers: {
