@@ -27,9 +27,9 @@ const EntryCard = ({ entry, driveImageUrl, onEdit, onDelete, canEdit }: Props) =
     <article className="entry-card">
       <div className="entry-card__image">
         {imageUrl ? (
-          <img src={imageUrl} alt={entry.name} />
+          <img src={imageUrl} alt={`${displayName} photo`} loading="lazy" />
         ) : (
-          <span>pic</span>
+          <span aria-hidden="true">pic</span>
         )}
       </div>
       <div className="entry-card__content">
