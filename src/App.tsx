@@ -947,7 +947,7 @@ const App = () => {
               <h2 id="reconnect-drive-title">Reconnect Google Drive</h2>
             </div>
             <p>
-              Your Drive access expired. Reconnect to continue syncing — you stay signed in either
+              Your Drive access expired. Reconnect to continue syncing. You stay signed in either
               way.
             </p>
             <div className="modal__footer">
@@ -1006,7 +1006,7 @@ const App = () => {
             <p>
               <strong>Your data lives in your Google Drive.</strong> The catalog is a single JSON
               file in the app's appdata folder; uploaded photos go to a folder you can see. There is
-              no shared backend database — every account stores its own list, end of story.
+              no shared backend database. Every account stores its own list, end of story.
             </p>
             <p>
               <strong>No tracking, no analytics.</strong> The serverless API only exists to send the

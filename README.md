@@ -26,7 +26,7 @@ uncomment the table below.
 
 - Frontend: Vite + React + TypeScript, deployed to GitHub Pages.
 - Auth: Firebase Authentication (Google provider) with silent token refresh via Google Identity Services on web and Capacitor SocialLogin on Android.
-- Storage: each user's own Google Drive — JSON catalog in the app's appdata folder, photos in a visible folder.
+- Storage: each user's own Google Drive. JSON catalog in the app's appdata folder, photos in a visible folder.
 - Email: a single Vercel serverless function that verifies Firebase ID tokens, dedups via Firestore, and sends transactional emails through Resend.
 - Mobile: Capacitor wrapper for Android, distributed through Google Play.
 

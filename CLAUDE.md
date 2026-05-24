@@ -56,11 +56,11 @@ Android: packaged via Capacitor, ships through Google Play (internal track today
 ```
 
 Two doc files already exist alongside this one:
-- `README.md` — user-facing description.
-- `INTERNALS.md` — env vars, deployment topology, OAuth setup.
-- `ANDROID_SETUP.md` — keystores, fingerprints, Play console.
-- `SECURITY.md` — security policy / disclosure.
-- `TODO.md` — punch list of known issues and the polish roadmap. **Read this before starting work.**
+- `README.md`: user-facing description.
+- `INTERNALS.md`: env vars, deployment topology, OAuth setup.
+- `ANDROID_SETUP.md`: keystores, fingerprints, Play console.
+- `SECURITY.md`: security policy / disclosure.
+- `TODO.md`: punch list of known issues and the polish roadmap. **Read this before starting work.**
 
 ## Data model
 
@@ -93,24 +93,24 @@ interface SofullEntry {
 }
 ```
 
-Note: `spiciness` is **overloaded** — for non-ramyeon categories the same enum represents crunchiness/sweetness/creaminess. The label and icon are derived from `category` via [src/utils/attribute.ts](src/utils/attribute.ts). Don't add per-category fields; this is intentional and the renderer already handles it.
+Note: `spiciness` is **overloaded**. For non-ramyeon categories the same enum represents crunchiness/sweetness/creaminess. The label and icon are derived from `category` via [src/utils/attribute.ts](src/utils/attribute.ts). Don't add per-category fields; this is intentional and the renderer already handles it.
 
 ## Auth & session model
 
 There are **two independent clocks** the user can lose. Always treat them as separate:
 
-1. **Firebase session** — 180 days (configurable via `VITE_SESSION_DURATION_DAYS`). Persisted via `browserLocalPersistence` + `sofull-google-session-start` in localStorage. This is what gates "are you logged in".
-2. **Google Drive access token** — ~50 min TTL (`VITE_ACCESS_TOKEN_TTL_MS`, default 3,000,000ms). This is what gates "can you read/write Drive". Stored as `sofull-google-access-token` in localStorage with `{ token, storedAt, expiresAt }` shape.
+1. **Firebase session**: 180 days (configurable via `VITE_SESSION_DURATION_DAYS`). Persisted via `browserLocalPersistence` + `sofull-google-session-start` in localStorage. This is what gates "are you logged in".
+2. **Google Drive access token**: ~50 min TTL (`VITE_ACCESS_TOKEN_TTL_MS`, default 3,000,000ms). This is what gates "can you read/write Drive". Stored as `sofull-google-access-token` in localStorage with `{ token, storedAt, expiresAt }` shape.
 
 `isLoggedIn` is platform-dependent ([App.tsx:185](src/App.tsx#L185)):
-- **Web**: `Boolean(user && accessToken)` — token loss boots you out of write UI.
-- **Native**: `Boolean(user)` — token can be silently refreshed, so UI stays "logged in" even mid-refresh.
+- **Web**: `Boolean(user && accessToken)`. Token loss boots you out of write UI.
+- **Native**: `Boolean(user)`. Token can be silently refreshed, so UI stays "logged in" even mid-refresh.
 
 ### Web flow
 
 1. `signInWithPopup` → Firebase user + Google access token.
-2. `shouldSendLoginEmail` checks a per-device entry in Firestore (`users/{uid}/devices/{deviceId}`) to decide whether to ping the email API. Device ID is a random UUID stored in `sofull-web-device-id`. The same gate runs on Android, keyed off `sofull-native-device-id` (resolved from `Capacitor.Device.getId()` with UUID fallback) — see "Email API" below for the dedup chain.
-3. **Silent token refresh**: GIS token client (`google.accounts.oauth2.initTokenClient`) is used to refresh the Drive access token without a popup. Triggered both proactively (~5 min before expiry) and reactively (when the polling effect detects expiry). Requires `VITE_GOOGLE_WEB_CLIENT_ID` to be present at build time — without it, silent refresh degrades and the modal falls back to `signIn`. The GIS script is loaded from `https://accounts.google.com/gsi/client` in `index.html`, and the CSP already allows the relevant hosts.
+2. `shouldSendLoginEmail` checks a per-device entry in Firestore (`users/{uid}/devices/{deviceId}`) to decide whether to ping the email API. Device ID is a random UUID stored in `sofull-web-device-id`. The same gate runs on Android, keyed off `sofull-native-device-id` (resolved from `Capacitor.Device.getId()` with UUID fallback). See "Email API" below for the dedup chain.
+3. **Silent token refresh**: GIS token client (`google.accounts.oauth2.initTokenClient`) is used to refresh the Drive access token without a popup. Triggered both proactively (~5 min before expiry) and reactively (when the polling effect detects expiry). Requires `VITE_GOOGLE_WEB_CLIENT_ID` to be present at build time; without it, silent refresh degrades and the modal falls back to `signIn`. The GIS script is loaded from `https://accounts.google.com/gsi/client` in `index.html`, and the CSP already allows the relevant hosts.
 4. If silent refresh fails (consent revoked, user signed out of Google, etc.), `tokenExpired=true` shows the **"Reconnect Google Drive"** modal. Clicking Reconnect calls `reconnectDrive()` which retries silent first, then `prompt: 'consent'` interactive, then falls back to full `signIn`.
 
 ### Android flow
@@ -118,7 +118,7 @@ There are **two independent clocks** the user can lose. Always treat them as sep
 1. `SocialLogin.initialize` (once per process) → `SocialLogin.login` with **empty scope list** first (just sign-in).
 2. Then a second `SocialLogin.login` with the Drive scopes. The second call's email **must** match the first (`GOOGLE_ACCOUNT_MISMATCH_MESSAGE`); mismatches force a logout. This is the fix from commit `115f9e9`.
 3. `notifyAuthEmail` is called after both prompts succeed.
-4. Silent refresh runs every 10 min and on `user` change. It tries `SocialLogin.refresh` then falls back to `SocialLogin.getAuthorizationCode`. All native calls are wrapped in `withTimeout(15s)` ([useGoogleAuth.ts:66](src/hooks/useGoogleAuth.ts#L66)) — that fix landed in commit `368041a` to stop app-resume hangs.
+4. Silent refresh runs every 10 min and on `user` change. It tries `SocialLogin.refresh` then falls back to `SocialLogin.getAuthorizationCode`. All native calls are wrapped in `withTimeout(15s)` ([useGoogleAuth.ts:66](src/hooks/useGoogleAuth.ts#L66)); that fix landed in commit `368041a` to stop app-resume hangs.
 5. If the user cancels the Drive prompt, `androidDriveScopeGranted` goes false. Subsequent refreshes request only `BASIC_SCOPES` until the user retries via the refresh button.
 
 ### Drive operation pattern
@@ -134,8 +134,8 @@ Pipeline:
 2. Rate limit twice (IP, then UID), using an in-memory `Map`. Limits are per-instance, so Vercel cold starts effectively reset them.
 3. Verify ID token via firebase-admin.
 4. Load `email_state/{uid}` from Firestore. Compute plan via `computeEmailPlan({ state, now, authTimeMs, loginCooldownMs })`:
-   - `welcomeSent` flag controls the welcome email — sent once per account, ever.
-   - `authTimeMs` (from the ID token's `auth_time`) dedupes the login email — if the incoming `auth_time` ≤ stored `lastAuthEventTime`, it's a duplicate.
+   - `welcomeSent` flag controls the welcome email, sent once per account, ever.
+   - `authTimeMs` (from the ID token's `auth_time`) dedupes the login email: if the incoming `auth_time` ≤ stored `lastAuthEventTime`, it's a duplicate.
    - `LOGIN_EMAIL_COOLDOWN_SECONDS` adds optional cooldown when `auth_time` is unavailable.
 5. For each email type to send, `claimEmailEventInState` runs a transaction that writes a pending event keyed by `${type}_${authTimeMs|now}`. If the same event already exists in non-failed state, the send is skipped (idempotency).
 6. Send via Resend (`https://api.resend.com/emails`). On failure, mark the event as `failed` and return 502.
@@ -172,19 +172,19 @@ npm run android:release:internal   # build signed AAB + upload to Play internal
 
 Client (Vite, must be prefixed `VITE_`):
 - `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`
-- `VITE_GOOGLE_WEB_CLIENT_ID` — required for native sign-in AND for web silent token refresh via GIS.
-- `VITE_AUTH_EMAIL_ENDPOINT` — full HTTPS URL for Android, relative `/api/auth-email` OK for web.
-- `VITE_SESSION_DURATION_DAYS` — Firebase session length, default 180.
-- `VITE_ACCESS_TOKEN_TTL_MS` — Drive token assumed lifetime, default 50 min.
-- `VITE_ACCESS_TOKEN_REFRESH_INTERVAL_MS` — Android silent-refresh interval, default 10 min.
-- `VITE_NATIVE_AUTH_TIMEOUT_MS` — native SocialLogin call timeout, default 15s.
+- `VITE_GOOGLE_WEB_CLIENT_ID`: required for native sign-in AND for web silent token refresh via GIS.
+- `VITE_AUTH_EMAIL_ENDPOINT`: full HTTPS URL for Android, relative `/api/auth-email` OK for web.
+- `VITE_SESSION_DURATION_DAYS`: Firebase session length, default 180.
+- `VITE_ACCESS_TOKEN_TTL_MS`: Drive token assumed lifetime, default 50 min.
+- `VITE_ACCESS_TOKEN_REFRESH_INTERVAL_MS`: Android silent-refresh interval, default 10 min.
+- `VITE_NATIVE_AUTH_TIMEOUT_MS`: native SocialLogin call timeout, default 15s.
 
 Server (Vercel project env):
 - `RESEND_API_KEY`, `RESEND_FROM_EMAIL`
-- `FIREBASE_SERVICE_ACCOUNT_JSON` — raw JSON of the admin SDK service account.
-- `PUBLIC_SITE_URL` — for links/logos in emails. Falls back to `https://sofull.site`.
-- `SUPPORT_EMAIL` — default `support@sofull.site`.
-- `EMAIL_LOGO_URL` — optional PNG override (SVG is skipped, most email clients block it).
+- `FIREBASE_SERVICE_ACCOUNT_JSON`: raw JSON of the admin SDK service account.
+- `PUBLIC_SITE_URL`: for links/logos in emails. Falls back to `https://sofull.site`.
+- `SUPPORT_EMAIL`: default `support@sofull.site`.
+- `EMAIL_LOGO_URL`: optional PNG override (SVG is skipped, most email clients block it).
 - `LOGIN_EMAIL_COOLDOWN_SECONDS`, `AUTH_EMAIL_RATE_LIMIT_MAX`, `AUTH_EMAIL_RATE_LIMIT_WINDOW_SECONDS`
 - `CORS_ORIGINS`, `DEV_CORS_ORIGINS`, `ALLOW_LOCALHOST_ORIGIN`
 
@@ -209,7 +209,7 @@ Android release (loaded by [scripts/android-release-internal.mjs](scripts/androi
 - **No new components without need.** The app is intentionally single-`App.tsx`; split only when a piece is genuinely reusable or grows past ~150 lines of JSX.
 - **Sanitize at the trust boundary.** Anything coming back from Drive goes through `sanitizeEntries`. Anything user-typed for image URLs goes through `sanitizeUrl` (HTTPS-only). Don't bypass either.
 - **Drive calls go through `googleDriveClient.ts`.** No direct `fetch` to googleapis in components.
-- **All native calls must be `withTimeout`-wrapped.** This isn't optional — `@capgo/capacitor-social-login` can deadlock during app resume. See [useGoogleAuth.ts:66-84](src/hooks/useGoogleAuth.ts#L66-L84).
+- **All native calls must be `withTimeout`-wrapped.** This isn't optional. `@capgo/capacitor-social-login` can deadlock during app resume. See [useGoogleAuth.ts:66-84](src/hooks/useGoogleAuth.ts#L66-L84).
 - **Don't add per-category data fields.** The `spiciness` enum is reused for crunch/sweet/creamy by design; only the rendering layer is category-aware.
 - **Commit messages**: short, lowercase, action verb (`fix x`, `add y`, `update z`). No conventional-commits prefixes, no scopes. Match what's already in `git log`.
 
@@ -234,6 +234,6 @@ See [TODO.md](TODO.md) for the live punch list.
 ## When in doubt
 
 - Drive-related bug? Open `googleDriveClient.ts` and the surrounding `runDriveOperationWithScopeRetry` wrapper before patching `useGoogleAuth.ts`.
-- Auth-related bug? Read the entire `useGoogleAuth.ts` — it's one file on purpose. The state machine doesn't split cleanly.
+- Auth-related bug? Read the entire `useGoogleAuth.ts`. It's one file on purpose; the state machine doesn't split cleanly.
 - Email-related bug? Read `computeEmailPlan` first; the dedup logic is the load-bearing part.
 - Android-only bug? Check the workflow logs and the keystore fingerprints. Most "Account reauth failed" errors are a fingerprint mismatch between the app-signing certificate and the OAuth client.
