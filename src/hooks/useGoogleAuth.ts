@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
+import { Device } from '@capacitor/device';
 import { SocialLogin } from '@capgo/capacitor-social-login';
 import { firebaseApp } from '../firebase';
 import {
@@ -27,7 +28,6 @@ DRIVE_SCOPES.forEach((scope) => provider.addScope(scope));
 provider.setCustomParameters({ prompt: 'select_account consent' });
 
 const ACCESS_TOKEN_KEY = 'sofull-google-access-token';
-const LEGACY_ACCESS_TOKEN_KEY = 'ramyeon-google-access-token';
 const DEFAULT_ACCESS_TOKEN_LIFETIME_MS = 50 * 60 * 1000;
 const ACCESS_TOKEN_LIFETIME_MS = (() => {
   const raw = Number(import.meta.env.VITE_ACCESS_TOKEN_TTL_MS);
@@ -41,7 +41,6 @@ const ACCESS_TOKEN_REFRESH_INTERVAL_MS = (() => {
   return DEFAULT_ACCESS_TOKEN_REFRESH_INTERVAL_MS;
 })();
 const SESSION_START_KEY = 'sofull-google-session-start';
-const LEGACY_SESSION_START_KEY = 'ramyeon-google-session-start';
 const DEFAULT_SESSION_DURATION_DAYS = 180;
 const SESSION_DURATION_DAYS = (() => {
   const raw = Number(import.meta.env.VITE_SESSION_DURATION_DAYS);
@@ -52,6 +51,7 @@ const SESSION_DURATION_MS = SESSION_DURATION_DAYS * 24 * 60 * 60 * 1000;
 const AUTH_EMAIL_ENDPOINT = import.meta.env.VITE_AUTH_EMAIL_ENDPOINT;
 const GOOGLE_WEB_CLIENT_ID = import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID;
 const WEB_DEVICE_ID_KEY = 'sofull-web-device-id';
+const NATIVE_DEVICE_ID_KEY = 'sofull-native-device-id';
 const TOKEN_EXPIRY_POLL_MS = 10 * 1000;
 const DEFAULT_NATIVE_AUTH_TIMEOUT_MS = 15 * 1000;
 const NATIVE_AUTH_TIMEOUT_MS = (() => {
@@ -61,6 +61,10 @@ const NATIVE_AUTH_TIMEOUT_MS = (() => {
 })();
 const IS_NATIVE = Capacitor.isNativePlatform();
 const IS_ANDROID = Capacitor.getPlatform() === 'android';
+const DRIVE_SCOPE_STRING = DRIVE_SCOPES.join(' ');
+const WEB_SILENT_REFRESH_LEAD_MS = 5 * 60 * 1000;
+const WEB_GIS_READY_TIMEOUT_MS = 5000;
+const WEB_GIS_POLL_INTERVAL_MS = 50;
 let socialLoginInitialized = false;
 
 const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: string) => {
@@ -80,6 +84,86 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: 
         reject(error);
       }
     );
+  });
+};
+
+interface GisTokenResponse {
+  access_token?: string;
+  expires_in?: number;
+  scope?: string;
+  error?: string;
+}
+
+interface GisTokenClient {
+  requestAccessToken: (overrides?: { prompt?: string; hint?: string }) => void;
+}
+
+interface GisOAuth2 {
+  initTokenClient: (config: {
+    client_id: string;
+    scope: string;
+    callback: (response: GisTokenResponse) => void;
+    error_callback?: (error: { type?: string; message?: string }) => void;
+  }) => GisTokenClient;
+}
+
+const getGisOAuth2 = (): GisOAuth2 | null => {
+  const google = (globalThis as unknown as { google?: { accounts?: { oauth2?: GisOAuth2 } } })
+    .google;
+  return google?.accounts?.oauth2 ?? null;
+};
+
+const waitForGisOAuth2 = async (timeoutMs = WEB_GIS_READY_TIMEOUT_MS): Promise<GisOAuth2 | null> => {
+  const start = Date.now();
+  let oauth2 = getGisOAuth2();
+  while (!oauth2 && Date.now() - start < timeoutMs) {
+    await new Promise((resolve) => setTimeout(resolve, WEB_GIS_POLL_INTERVAL_MS));
+    oauth2 = getGisOAuth2();
+  }
+  return oauth2;
+};
+
+type WebTokenResult = { token: string; expiresInMs: number | null };
+
+const requestWebAccessToken = async (
+  hint: string | null,
+  interactive: boolean
+): Promise<WebTokenResult | null> => {
+  if (!GOOGLE_WEB_CLIENT_ID) return null;
+  const oauth2 = await waitForGisOAuth2();
+  if (!oauth2) return null;
+
+  return await new Promise<WebTokenResult | null>((resolve) => {
+    let settled = false;
+    const settle = (value: WebTokenResult | null) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    try {
+      const client = oauth2.initTokenClient({
+        client_id: GOOGLE_WEB_CLIENT_ID,
+        scope: DRIVE_SCOPE_STRING,
+        callback: (response) => {
+          if (response.access_token) {
+            const expiresInMs =
+              typeof response.expires_in === 'number' && response.expires_in > 0
+                ? response.expires_in * 1000
+                : null;
+            settle({ token: response.access_token, expiresInMs });
+          } else {
+            settle(null);
+          }
+        },
+        error_callback: () => settle(null)
+      });
+      client.requestAccessToken({
+        prompt: interactive ? 'consent' : '',
+        ...(hint ? { hint } : {})
+      });
+    } catch {
+      settle(null);
+    }
   });
 };
 
@@ -208,17 +292,13 @@ const parseStoredToken = (raw: string | null) => {
   }
 };
 
-const readTokenEntryFromKey = (key: string) => parseStoredToken(localStorage.getItem(key));
-
 const persistTokenEntry = (entry: StoredTokenEntry | null) => {
   try {
     if (!entry) {
       localStorage.removeItem(ACCESS_TOKEN_KEY);
-      localStorage.removeItem(LEGACY_ACCESS_TOKEN_KEY);
       return;
     }
     localStorage.setItem(ACCESS_TOKEN_KEY, JSON.stringify(entry));
-    localStorage.removeItem(LEGACY_ACCESS_TOKEN_KEY);
   } catch {
     // Ignore storage write failures.
   }
@@ -245,16 +325,8 @@ const toTokenState = (entry: StoredTokenEntry) => {
 };
 
 const readStoredToken = () => {
-  const primary = readTokenEntryFromKey(ACCESS_TOKEN_KEY);
-  if (primary) return toTokenState(primary);
-  const legacy = readTokenEntryFromKey(LEGACY_ACCESS_TOKEN_KEY);
-  if (legacy) {
-    const state = toTokenState(legacy);
-    if (state.token) {
-      persistTokenEntry(legacy);
-    }
-    return state;
-  }
+  const entry = parseStoredToken(localStorage.getItem(ACCESS_TOKEN_KEY));
+  if (entry) return toTokenState(entry);
   return { token: null, expiresAt: null };
 };
 
@@ -265,26 +337,16 @@ const parseSessionStart = (raw: string | null) => {
   return parsed;
 };
 
-const readSessionStart = () => {
-  const primary = parseSessionStart(localStorage.getItem(SESSION_START_KEY));
-  if (primary) return primary;
-  const legacy = parseSessionStart(localStorage.getItem(LEGACY_SESSION_START_KEY));
-  if (legacy) {
-    persistSessionStart(legacy);
-    return legacy;
-  }
-  return null;
-};
+const readSessionStart = () =>
+  parseSessionStart(localStorage.getItem(SESSION_START_KEY));
 
 const persistSessionStart = (timestamp: number | null) => {
   try {
     if (!timestamp) {
       localStorage.removeItem(SESSION_START_KEY);
-      localStorage.removeItem(LEGACY_SESSION_START_KEY);
       return;
     }
     localStorage.setItem(SESSION_START_KEY, String(timestamp));
-    localStorage.removeItem(LEGACY_SESSION_START_KEY);
   } catch {
     // Ignore storage write failures.
   }
@@ -306,20 +368,48 @@ const persistToken = (token: string | null) => {
   }
 };
 
-const getOrCreateWebDeviceId = () => {
+const generateFallbackDeviceId = (prefix: string) =>
+  globalThis.crypto?.randomUUID
+    ? globalThis.crypto.randomUUID()
+    : `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+const readDeviceIdFromStorage = (key: string) => {
   try {
-    const existing = localStorage.getItem(WEB_DEVICE_ID_KEY);
-    if (existing) return existing;
-    const generated = globalThis.crypto?.randomUUID
-      ? globalThis.crypto.randomUUID()
-      : `web-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    localStorage.setItem(WEB_DEVICE_ID_KEY, generated);
-    return generated;
+    return localStorage.getItem(key);
   } catch {
-    return globalThis.crypto?.randomUUID
-      ? globalThis.crypto.randomUUID()
-      : `web-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    return null;
   }
+};
+
+const persistDeviceId = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Ignore storage write failures.
+  }
+};
+
+const getOrCreateWebDeviceId = () => {
+  const existing = readDeviceIdFromStorage(WEB_DEVICE_ID_KEY);
+  if (existing) return existing;
+  const generated = generateFallbackDeviceId('web');
+  persistDeviceId(WEB_DEVICE_ID_KEY, generated);
+  return generated;
+};
+
+const getOrCreateNativeDeviceId = async () => {
+  const existing = readDeviceIdFromStorage(NATIVE_DEVICE_ID_KEY);
+  if (existing) return existing;
+  let identifier: string | null = null;
+  try {
+    const info = await Device.getId();
+    if (info?.identifier) identifier = info.identifier;
+  } catch {
+    // Fall through to UUID fallback.
+  }
+  const resolved = identifier ?? generateFallbackDeviceId('native');
+  persistDeviceId(NATIVE_DEVICE_ID_KEY, resolved);
+  return resolved;
 };
 
 const toTimestampMs = (value: unknown) => {
@@ -364,29 +454,39 @@ const isFirestorePermissionDenied = (err: unknown) => {
   return code === 'permission-denied' || code === 'firestore/permission-denied';
 };
 
-const localWebDeviceGateKey = (uid: string, deviceId: string) =>
-  `sofull-web-device-gate:${uid}:${deviceId}`;
+type DeviceGatePlatform = 'web' | 'android' | 'ios';
 
-const hasLocalWebDeviceGate = (uid: string, deviceId: string) => {
+const localDeviceGateKey = (platform: DeviceGatePlatform, uid: string, deviceId: string) =>
+  `sofull-${platform}-device-gate:${uid}:${deviceId}`;
+
+const hasLocalDeviceGate = (platform: DeviceGatePlatform, uid: string, deviceId: string) => {
   try {
-    return localStorage.getItem(localWebDeviceGateKey(uid, deviceId)) === '1';
+    return localStorage.getItem(localDeviceGateKey(platform, uid, deviceId)) === '1';
   } catch {
     return false;
   }
 };
 
-const markLocalWebDeviceGate = (uid: string, deviceId: string) => {
+const markLocalDeviceGate = (platform: DeviceGatePlatform, uid: string, deviceId: string) => {
   try {
-    localStorage.setItem(localWebDeviceGateKey(uid, deviceId), '1');
+    localStorage.setItem(localDeviceGateKey(platform, uid, deviceId), '1');
   } catch {
     // Ignore storage write failures.
   }
 };
 
-const shouldSendWebLoginEmail = async (uid: string) => {
-  const deviceId = getOrCreateWebDeviceId();
+const resolveLoginEmailPlatform = (): DeviceGatePlatform => {
+  if (!IS_NATIVE) return 'web';
+  if (Capacitor.getPlatform() === 'ios') return 'ios';
+  return 'android';
+};
+
+const shouldSendLoginEmail = async (uid: string) => {
+  const platform = resolveLoginEmailPlatform();
+  const deviceId = platform === 'web' ? getOrCreateWebDeviceId() : await getOrCreateNativeDeviceId();
   const deviceMetadata = await getClientDeviceMetadata();
-  const deviceName = deviceMetadata.label || deviceMetadata.browser || 'Unknown device';
+  const deviceName =
+    deviceMetadata.label || deviceMetadata.browser || deviceMetadata.deviceModel || 'Unknown device';
   try {
     const db = getFirestore(firebaseApp);
     const deviceRef = doc(db, 'users', uid, 'devices', deviceId);
@@ -405,7 +505,7 @@ const shouldSendWebLoginEmail = async (uid: string) => {
         deviceRef,
         {
           deviceName,
-          platform: 'web',
+          platform,
           lastRegistrationAt: serverTimestamp()
         },
         { merge: true }
@@ -416,7 +516,7 @@ const shouldSendWebLoginEmail = async (uid: string) => {
       deviceRef,
       {
         deviceName,
-        platform: 'web',
+        platform,
         firstSeenAt: serverTimestamp(),
         lastRegistrationAt: serverTimestamp()
       },
@@ -425,13 +525,13 @@ const shouldSendWebLoginEmail = async (uid: string) => {
     return true;
   } catch (err) {
     if (isFirestorePermissionDenied(err)) {
-      if (hasLocalWebDeviceGate(uid, deviceId)) {
+      if (hasLocalDeviceGate(platform, uid, deviceId)) {
         return false;
       }
-      markLocalWebDeviceGate(uid, deviceId);
+      markLocalDeviceGate(platform, uid, deviceId);
       return true;
     }
-    console.warn('Web device email gate failed.', err);
+    console.warn('Device email gate failed.', err);
     return true;
   }
 };
@@ -468,6 +568,7 @@ export const useGoogleAuth = () => {
   const [androidDriveScopeGranted, setAndroidDriveScopeGranted] = useState(true);
   const accessTokenRef = useRef<string | null>(stored.token);
   const accessTokenExpiresAtRef = useRef<number | null>(stored.expiresAt);
+  const hadAuthenticatedUserRef = useRef<boolean>(Boolean(auth.currentUser));
 
   useEffect(() => {
     accessTokenRef.current = accessToken;
@@ -613,9 +714,20 @@ export const useGoogleAuth = () => {
         if (refreshed) return refreshed;
         return accessTokenRef.current;
       }
+
+      const currentUser = auth.currentUser;
+      if (!currentUser) return accessTokenRef.current;
+      const result = await requestWebAccessToken(
+        getGoogleUserEmail(currentUser),
+        Boolean(options?.interactive)
+      );
+      if (result?.token) {
+        applyAccessToken(result.token, result.expiresInMs);
+        return result.token;
+      }
       return accessTokenRef.current;
     },
-    [androidDriveScopeGranted, applyAccessToken]
+    [androidDriveScopeGranted, applyAccessToken, auth]
   );
 
   const getAccessToken = useCallback(
@@ -671,7 +783,7 @@ export const useGoogleAuth = () => {
 
       if (refreshed) return refreshed;
 
-      if (!current) {
+      if (!current || isExpired) {
         expireToken();
         return null;
       }
@@ -688,6 +800,39 @@ export const useGoogleAuth = () => {
     ]
   );
 
+  const reconnectDrive = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      if (IS_NATIVE) {
+        const token = await getAccessToken({
+          interactive: true,
+          forceRefresh: true,
+          requireDriveScope: IS_ANDROID,
+          forceDriveScopePrompt: IS_ANDROID
+        });
+        if (token) {
+          setTokenExpired(false);
+          return true;
+        }
+        return false;
+      }
+      const silent = await refreshAccessToken({ interactive: false });
+      if (silent) {
+        setTokenExpired(false);
+        return true;
+      }
+      const interactive = await refreshAccessToken({ interactive: true });
+      if (interactive) {
+        setTokenExpired(false);
+        return true;
+      }
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, [getAccessToken, refreshAccessToken]);
+
   useEffect(() => {
     let active = true;
     setPersistence(auth, browserLocalPersistence).catch((err) => {
@@ -698,6 +843,7 @@ export const useGoogleAuth = () => {
     const unsub = onAuthStateChanged(auth, (nextUser) => {
       const now = Date.now();
       if (nextUser) {
+        hadAuthenticatedUserRef.current = true;
         const storedSessionStart = readSessionStart();
         const effectiveStart = storedSessionStart ?? now;
         if (!storedSessionStart) {
@@ -710,6 +856,8 @@ export const useGoogleAuth = () => {
         return;
       }
       setUser(null);
+      if (!hadAuthenticatedUserRef.current) return;
+      hadAuthenticatedUserRef.current = false;
       setAccessToken(null);
       setAccessTokenExpiresAt(null);
       persistToken(null);
@@ -753,15 +901,43 @@ export const useGoogleAuth = () => {
   useEffect(() => {
     if (IS_NATIVE) return;
     if (!user || !accessToken || !accessTokenExpiresAt) return;
-    const checkExpiry = () => {
-      if (Date.now() >= accessTokenExpiresAt) {
-        expireToken();
+    let cancelled = false;
+    let refreshing = false;
+
+    const tryRefreshOrExpire = async () => {
+      if (refreshing) return;
+      refreshing = true;
+      try {
+        const refreshed = await refreshAccessToken({ interactive: false });
+        if (cancelled) return;
+        if (!refreshed || refreshed === accessToken) {
+          expireToken();
+        }
+      } finally {
+        refreshing = false;
       }
     };
+
+    const checkExpiry = () => {
+      if (Date.now() >= accessTokenExpiresAt) {
+        void tryRefreshOrExpire();
+      }
+    };
+
+    const leadMs = Math.max(0, accessTokenExpiresAt - Date.now() - WEB_SILENT_REFRESH_LEAD_MS);
+    const proactiveTimer = window.setTimeout(() => {
+      if (cancelled) return;
+      void tryRefreshOrExpire();
+    }, leadMs);
+
     checkExpiry();
     const interval = window.setInterval(checkExpiry, TOKEN_EXPIRY_POLL_MS);
-    return () => window.clearInterval(interval);
-  }, [user, accessToken, accessTokenExpiresAt, expireToken]);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(proactiveTimer);
+      window.clearInterval(interval);
+    };
+  }, [user, accessToken, accessTokenExpiresAt, expireToken, refreshAccessToken]);
 
   const signIn = async () => {
     setLoading(true);
@@ -781,15 +957,16 @@ export const useGoogleAuth = () => {
         }
         updateSessionStart(Date.now());
         setAndroidDriveScopeGranted(true);
-        void notifyAuthEmail(authResult.user);
+        if (await shouldSendLoginEmail(authResult.user.uid)) {
+          void notifyAuthEmail(authResult.user);
+        }
         return;
       }
-      await setPersistence(auth, browserLocalPersistence);
       const result = await signInWithPopup(auth, provider);
       const credential = GoogleAuthProvider.credentialFromResult(result);
       applyAccessToken(credential?.accessToken ?? null);
       updateSessionStart(Date.now());
-      if (await shouldSendWebLoginEmail(result.user.uid)) {
+      if (await shouldSendLoginEmail(result.user.uid)) {
         void notifyAuthEmail(result.user);
       }
     } catch (err) {
@@ -822,12 +999,12 @@ export const useGoogleAuth = () => {
   return {
     user,
     accessToken,
-    accessTokenExpiresAt,
     tokenExpired,
     clearTokenExpired,
     loading,
     error,
     getAccessToken,
+    reconnectDrive,
     signIn,
     signOut: signOutUser
   };

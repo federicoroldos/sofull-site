@@ -162,7 +162,8 @@ const App = () => {
     error: authError,
     signIn,
     signOut,
-    getAccessToken
+    getAccessToken,
+    reconnectDrive
   } = useGoogleAuth();
   const [entries, setEntries] = useState<SofullEntry[]>([]);
   const [sortMode, setSortMode] = useState<SortMode>('latest');
@@ -811,13 +812,16 @@ const App = () => {
       />
 
       {tokenExpired && (
-        <div className="modal" role="dialog" aria-modal="true" aria-labelledby="session-expired-title">
+        <div className="modal" role="dialog" aria-modal="true" aria-labelledby="reconnect-drive-title">
           <div className="modal__backdrop" />
           <div className="modal__content">
             <div className="modal__header">
-              <h2 id="session-expired-title">Session expired</h2>
+              <h2 id="reconnect-drive-title">Reconnect Google Drive</h2>
             </div>
-            <p>Your Google access token expired. Sign in again to continue syncing.</p>
+            <p>
+              Your Drive access expired. Reconnect to continue syncing — you stay signed in either
+              way.
+            </p>
             <div className="modal__footer">
               <button className="button button--ghost" onClick={clearTokenExpired}>
                 Dismiss
@@ -826,12 +830,17 @@ const App = () => {
                 className="button"
                 onClick={() => {
                   if (authLoading) return;
-                  clearTokenExpired();
-                  void signIn();
+                  void (async () => {
+                    const ok = await reconnectDrive();
+                    if (!ok) {
+                      clearTokenExpired();
+                      void signIn();
+                    }
+                  })();
                 }}
                 disabled={authLoading}
               >
-                Sign in again
+                Reconnect
               </button>
             </div>
           </div>

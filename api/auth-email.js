@@ -39,8 +39,7 @@ const SENSITIVE_KEYS = [
   'password',
   'private_key',
   'service_account',
-  'firebase',
-  'brevo'
+  'firebase'
 ];
 const SENSITIVE_PATTERNS = [
   /bearer\s+[a-z0-9._-]+/gi,
@@ -1436,7 +1435,7 @@ export default async function handler(req, res) {
           details: err.details,
           provider: 'resend',
           fromEmailConfigured: Boolean(process.env.RESEND_FROM_EMAIL),
-          toEmail
+          recipient: email
         });
       } else {
         logger.error('Failed to send email.', {

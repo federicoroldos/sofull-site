@@ -21,7 +21,6 @@ Client (Vite) variables:
 - `VITE_SESSION_DURATION_DAYS` (optional, defaults to 180)
 - `VITE_ACCESS_TOKEN_TTL_MS` (optional)
 - `VITE_ACCESS_TOKEN_REFRESH_INTERVAL_MS` (optional, defaults to 10 minutes)
-- `VITE_ENFORCE_ACCESS_TOKEN_EXPIRY` (optional)
 
 Server (email API) variables:
 - `RESEND_API_KEY`, `RESEND_FROM_EMAIL`
