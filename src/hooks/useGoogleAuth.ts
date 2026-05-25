@@ -800,6 +800,10 @@ export const useGoogleAuth = () => {
     ]
   );
 
+  const requestDriveReconnect = useCallback(() => {
+    setTokenExpired(true);
+  }, []);
+
   const reconnectDrive = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -1005,6 +1009,7 @@ export const useGoogleAuth = () => {
     error,
     getAccessToken,
     reconnectDrive,
+    requestDriveReconnect,
     signIn,
     signOut: signOutUser
   };
