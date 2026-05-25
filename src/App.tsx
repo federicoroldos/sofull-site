@@ -221,7 +221,8 @@ const App = () => {
     signIn,
     signOut,
     getAccessToken,
-    reconnectDrive
+    reconnectDrive,
+    requestDriveReconnect
   } = useGoogleAuth();
   const [entries, setEntries] = useState<SofullEntry[]>([]);
   const [sortMode, setSortMode] = useState<SortMode>('latest');
@@ -262,17 +263,21 @@ const App = () => {
       try {
         return await operation(token);
       } catch (error) {
-        if (!IS_ANDROID || !isDriveScopeError(error)) {
+        if (!isDriveScopeError(error)) {
           throw error;
         }
-        const promptedToken = await resolveDriveToken(true, true, true);
-        if (!promptedToken) {
-          throw error;
+        if (IS_ANDROID) {
+          const promptedToken = await resolveDriveToken(true, true, true);
+          if (!promptedToken) {
+            throw error;
+          }
+          return await operation(promptedToken);
         }
-        return await operation(promptedToken);
+        requestDriveReconnect();
+        throw error;
       }
     },
-    [IS_ANDROID, resolveDriveToken]
+    [IS_ANDROID, requestDriveReconnect, resolveDriveToken]
   );
 
   const collatorEn = useMemo(() => new Intl.Collator('en', { sensitivity: 'base' }), []);
@@ -947,8 +952,7 @@ const App = () => {
               <h2 id="reconnect-drive-title">Reconnect Google Drive</h2>
             </div>
             <p>
-              Your Drive access expired. Reconnect to continue syncing. You stay signed in either
-              way.
+              Reconnect Google Drive to sync your collection. You stay signed in either way.
             </p>
             <div className="modal__footer">
               <button className="button button--ghost" onClick={clearTokenExpired}>
